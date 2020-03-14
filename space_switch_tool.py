@@ -14,7 +14,7 @@ from PySide2 import QtWidgets, QtGui, QtCore
 
 
 def lock_viewport():
-    """Find Maya viewport and lock it down to save feedback time
+    """ Find Maya viewport and lock it down to save feedback time
 
     This function query user's active current panel and lock it down
     if it is a modelPanel (viewport).
@@ -28,10 +28,10 @@ def lock_viewport():
                     cmds.control(ctrl, edit=True, manage=False)
                  
 def unlock_viewport():
-    """Find Maya viewport and unlock it
+    """ Find Maya viewport and unlock it
 
     This function query user's active current panel and unlock it. 
-    It is a clean-up function for lock_viewport function
+    It is a clean-up function for lock_viewport function.
 
     """
     if not cmds.about(query=True, batch=True): # not in batch mode
@@ -42,7 +42,7 @@ def unlock_viewport():
                     cmds.control(ctrl, edit=True, manage=True)
 
 def filter_invalid_objects(objects):
-    """Take any list and filter out None and non-existing nodes
+    """ Take any list and filter out None and non-existing nodes
 
     This function takes an object list and check if None is inside
     (result of functions like cmds.keyframe). Then it checks if the objects
@@ -51,7 +51,7 @@ def filter_invalid_objects(objects):
     Arguments:
         objects (list): a list of any nodes.
 
-    Return:
+    Returns:
         objs (list): a list of nodes that is not None and exists in Maya.
 
     """
@@ -64,20 +64,28 @@ def filter_invalid_objects(objects):
                 
     return objs
 
-def createTransformKeys(objects=None, time=None, tx=False, ty=False, tz=False,
+def create_transform_keys(objects=None, time=None, tx=False, ty=False, tz=False,
                                                  rx=False, ry=False, rz=False,
                                                  sx=False, sy=False, sz=False):
-    """Take any list and filter out None and non-existing nodes
+    """ Key the transform channels selectively based on flags given
 
-    This function takes an object list and check if None is inside
-    (result of functions like cmds.keyframe). Then it checks if the objects
-    exist in the scene and returns them if they do.
+    This function takes an object list and set keys on the transform channels
+    based on the flags given. It is primary used to deal with cmds.setKeyframe
+    function so we can avoid repeating string formatting.
 
     Arguments:
-        objects (list): a list of any nodes.
-
-    Return:
-        objs (list): a list of nodes that is not None and exists in Maya.
+        objects (list): a list of any transform nodes.
+        time (int or float): frame number to set key frame on, set on
+                             current frame if None given.
+        tx (bool): translate X channel, keyed if set to True.
+        ty (bool): translate Y channel, keyed if set to True.
+        tz (bool): translate Z channel, keyed if set to True.
+        rx (bool): rotate X channel, keyed if set to True.
+        ry (bool): rotate Y channel, keyed if set to True.
+        rz (bool): rotate Z channel, keyed if set to True.
+        sx (bool): scale X channel, keyed if set to True.
+        sy (bool): scale Y channel, keyed if set to True.
+        sz (bool): scale Z channel, keyed if set to True.
 
     """                
     objs = filter_invalid_objects(objects) or cmds.ls(sl=True)
@@ -92,31 +100,37 @@ def createTransformKeys(objects=None, time=None, tx=False, ty=False, tz=False,
                     cmds.setKeyframe("{}.{}".format(obj, attr),
                                       time=(time, time))
 
-def get_timeline_range(float=True):
-    """Take any list and filter out None and non-existing nodes
+def get_timeline_range():
+    """ Return the current information about Maya timeline
 
-    This function takes an object list and check if None is inside
-    (result of functions like cmds.keyframe). Then it checks if the objects
-    exist in the scene and returns them if they do.
+    This function finds the minimum and maximum frame numbers of the current
+    playback range, and calculate the difference to find timeline range.
 
-    Arguments:
-        objects (list): a list of any nodes.
-
-    Return:
-        objs (list): a list of nodes that is not None and exists in Maya.
+    Returns:
+        min_time (float): first frame on the current Maya playback.
+        max_time (float): last frame on the current Maya playback.
+        time_range (float): the range of the current Maya playback.
 
     """  
-    minTime = cmds.playbackOptions(query=True, minTime=True)
-    maxTime = cmds.playbackOptions(query=True, maxTime=True)
-    timeRange = maxTime - minTime + 1
+    min_time = cmds.playbackOptions(query=True, minTime=True)
+    max_time = cmds.playbackOptions(query=True, maxTime=True)
+    time_range = min_time - max_time + 1
 
-    return [minTime, maxTime, timeRange]
+    return min_time, max_time, time_range
 
-def channelBoxSel():
-    
+def channel_box_selection():
+    """ Return the selected channelboxes
+
+    This function returns all the selected channelboxes in the format of
+    object.attribute.
+
+    Returns:
+        channels_sel (list): a list of all the channelbox selections
+
+    """      
     channels_sel = []
     
-    # get 
+    # get selected objects, returns None if nothing is selected
     mObj = cmds.channelBox('mainChannelBox', query=True,
                                              mainObjectList=True)
     sObj = cmds.channelBox('mainChannelBox', query=True,
@@ -126,6 +140,7 @@ def channelBoxSel():
     oObj = cmds.channelBox('mainChannelBox', query=True,
                                              outputObjectList=True)
 
+    # get selected attributes, returns None if nothing is selected
     mAttr = cmds.channelBox('mainChannelBox', query=True,
                              selectedMainAttributes=True)
     sAttr = cmds.channelBox('mainChannelBox', query=True,
@@ -134,7 +149,8 @@ def channelBoxSel():
                              selectedHistoryAttributes=True)
     oAttr = cmds.channelBox('mainChannelBox', query=True,
                              selectedOutputAttributes=True)
-    
+
+    # pair object and attribute together and check if they exist in Maya
     if mObj and mAttr:
         channels_sel.extend(["%s.%s"%(loop_obj, loop_attr)
                              for loop_obj in mObj for loop_attr in mAttr
@@ -154,45 +170,91 @@ def channelBoxSel():
      
     return channels_sel
 
-def doubleWarning(msg, title='warning!'):
-    '''
-    give out both script editor and popup warnings
-    '''
+def double_warning(msg, title='warning!'):
+    """ Give a Qt warning message and a Maya logging message
+
+    This function takes a string and gives a QMessageBox warning plus a Maya
+    logging message from that string.
+
+    Arguments:
+        msg (str): message to be displayed in warning and logging.
+        title (str): window title of the QMessageBox.
+
+    """  
     cmds.warning(msg)
     QtWidgets.QMessageBox.warning(None, title, msg)
 
-def getWorldMatrix(ctl):
-    '''
-    should only be run by switchSpace, where data is validated
-    '''
-    pos = cmds.xform(ctl, query=True, translation=True, worldSpace=True)
-    rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=True)
+def get_world_matrix(ctl):
+    """ Take one control and give back its world position and rotation
+
+    This function takes one transform node and returns its position
+    and rotation in world space.
+
+    Arguments:
+        ctl (str): a transform node
+
+    Returns:
+        pos (list): world position of the ctl, returns None if ctl is invalid
+        pos (list): world rotation of the ctl, returns None if ctl is invalid
+
+    """
+    # check if ctl exists and is a transform node
+    transform = cmds.ls(ctl, type="transform")
+    if transform:
+        pos = cmds.xform(ctl, query=True, translation=True, worldSpace=True)
+        rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=True)
+    else:
+        pos = None
+        rot = None
 
     return pos, rot
 
-def applyWorldMatrix(ctl, pos, rot):
-    '''
-    should only be run by switchSpace, where data is validated
-    '''
-    cmds.xform(ctl, translation=pos, worldSpace=True)
-    cmds.xform(ctl, rotation=rot, worldSpace=True)
+def apply_world_matrix(ctl, pos, rot):
+    """ Take a control and apply a given world position and rotation on it
+
+    This function takes one transform node and a set of world position and
+    rotation, and applies the latter on the former
+
+    Arguments:
+        ctl (str): a transform node
+        pos (list): a world position
+        rot (list): a world rotation
+
+    """
+    # check if ctl exists and is a transform node
+    transform = cmds.ls(ctl, type="transform")
+    if transform:
+        cmds.xform(ctl, translation=pos, worldSpace=True)
+        cmds.xform(ctl, rotation=rot, worldSpace=True)
 
 class customIntValidator(QtGui.QIntValidator):
-    """
-    accept empty value
+    """ Modify a QIntValidator so it will take an empty string
+
+    This function reimplements the validate method of QIntValidator to
+    accommodate an empty string user input.
+
+    Returns:
+        QValidator.Acceptable (QValidator): regular QValidator response
+        value (str): text that goes into QLineEdit
+        pos (list): position of the text
+
     """
     def validate(self, value, pos):
-        text = value.strip().title()
-        if text == "":
-            return QtGui.QValidator.Acceptable, text, pos
+        value = value.strip().title()
+        if value == "":
+            return QtGui.QValidator.Acceptable, value, pos
 
         return super(customIntValidator, self).validate(value, pos)
 
-def getMayaWindow():
-    """
-    Get Maya's main window.
-    
-    :rtype: QMainWindow
+def get_maya_window():
+    """ Get Maya's main window and wrap it as QMainWindow
+
+    This function takes Maya's main window and wraps as QMainWindow so it can
+    be set as parent for any Qt objects
+
+    Returns:
+        window (QMainWindow): a QMainWindow that wraps around Maya's window
+
     """
     window = OpenMayaUI.MQtUtil.mainWindow()
     window = shiboken.wrapInstance(long(window), QtWidgets.QMainWindow)
@@ -200,26 +262,23 @@ def getMayaWindow():
     return window
 
 class SpaceSwitchTool(QtWidgets.QDialog):
-    """ Utils class for processing frange string data.
+    """ UI class for space switching
 
-    Args:
-        frange (str|list):
-            frange list: contains multiple int frames.
-            frange str: contains multiple frames and franges separated
-                by spaces or commas.
-                Valid start/end frame delimiters are ':', '-'.
-                Valid step frame delimiters are ':' or 'x'.
+    Arguments:
+        parent (QMainWindow|None):
+            parent: accepts Maya's main window so this tool can be a children
+                    of Maya's interface.
+
     Attributes:
-        frange_str (str): string of frame/frange(s).
-        frange_list (list): list of frames.
-        step_re (regex): regular expression for frange step delimiter.
-        range_re (regex): regular expression for frange range delimiter.
-        frange_split_re (regex): regular expression for splitting
-            multiple frames/franges.
-        int_float_re (regex): regular expression for padding floats and
-            ints.
-        valid_frange_re (regex): regular expression for validating
-            frange strings.
+        _instruction_msg (str): overall instruction.
+        _default_source_label (str): instruction of what to load in source.
+        _default_target_label (str): instruction of what to load in target.
+        _default_ctl_label (str): instruction of what to load in control.
+        _spaceSwitch_data_dict (dict): dictionary data of source, target,
+                                       and control
+        _start_frame (str): start frame number in string, for QLineEdit
+        _end_frame (str): end frame number in string, for QLineEdit
+
     """
 
     def __init__(self, parent=None):
@@ -399,7 +458,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         data = []
         sel = cmds.ls(selection=True)
         if len(sel) == 1: # only allow user to select one obj
-            attr = channelBoxSel()
+            attr = channel_box_selection()
             if len(attr) == 1: # only allow user to select one attr
                 value = cmds.getAttr(attr[0])
                 self._spaceSwitch_data_dict[key] = [attr[0], value]
@@ -413,11 +472,11 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         self._spaceSwitch_data_dict[key] = []
         if key == "source space":
-            doubleWarning("invalid selection\n{}".format(
+            double_warning("invalid selection\n{}".format(
                                             self._default_source_label))
             self._load_source_label.setText(self._default_source_label)
         else:# key == "target space"
-            doubleWarning("invalid selection\n{}".format(
+            double_warning("invalid selection\n{}".format(
                                             self._default_target_label))
             self._load_target_label.setText(self._default_target_label)
 
@@ -432,7 +491,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             self._load_ctl_label.setText(sel[0])
             self._spaceSwitch_data_dict["target control"] = sel[0]
         else:
-            doubleWarning("invalid selection\n{}".format(
+            double_warning("invalid selection\n{}".format(
                                         self._default_ctl_label))
             self._spaceSwitch_data_dict["target control"] = ""
             self._load_ctl_label.setText(self._default_ctl_label)
@@ -493,7 +552,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             keyframes = new_keys
 
                         if not keyframes:
-                            doubleWarning("no keys to bake!")
+                            double_warning("no keys to bake!")
                             raise Exception # escape
 
                         matrixData = []
@@ -501,18 +560,18 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             cmds.currentTime(key, edit=True)
                             cmds.setAttr(source_space, source_value)
                             cmds.setKeyframe(source_space)
-                            pos, rot = getWorldMatrix(ctl)
+                            pos, rot = get_world_matrix(ctl)
                             matrixData.append((pos, rot))
 
                         # check if closing swap will run
                         if len(keyframes) > 1 and keyframes[-1] < ref_keys[-1]:
                             cmds.currentTime(keyframes[-1], edit=True)
-                            end_pos, end_rot = getWorldMatrix(ctl)
+                            end_pos, end_rot = get_world_matrix(ctl)
                             
                             # this may or may not be key so we have to be sure
                             # go to previos frame of the closing switch and save data
                             cmds.currentTime(keyframes[-1] - 1, edit=True)
-                            prev_pos, prev_rot = getWorldMatrix(ctl)
+                            prev_pos, prev_rot = get_world_matrix(ctl)
 
 
                         if keyframes[0] > ref_keys[0]:
@@ -534,16 +593,16 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             cmds.currentTime(keyframes[-1], edit=True)
                             cmds.setAttr(source_space, source_value)
                             cmds.setKeyframe(source_space)
-                            applyWorldMatrix(ctl, end_pos, end_rot)
-                            createTransformKeys(objects=[ctl],
+                            apply_world_matrix(ctl, end_pos, end_rot)
+                            create_transform_keys(objects=[ctl],
                                                 tx=True, ty=True, tz=True,
                                                 rx=True, ry=True, rz=True)
 
                             cmds.currentTime(keyframes[-1] - 1, edit=True)
                             cmds.setAttr(target_space, target_value)
                             cmds.setKeyframe(target_space)
-                            applyWorldMatrix(ctl, prev_pos, prev_rot)
-                            createTransformKeys(objects=[ctl],
+                            apply_world_matrix(ctl, prev_pos, prev_rot)
+                            create_transform_keys(objects=[ctl],
                                                 tx=True, ty=True, tz=True,
                                                 rx=True, ry=True, rz=True)
 
@@ -560,8 +619,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             cmds.setAttr(target_space, target_value)
                             cmds.setKeyframe(target_space)
                             pos, rot = matrixData[i]
-                            applyWorldMatrix(ctl, pos, rot)
-                            createTransformKeys(objects=[ctl],
+                            apply_world_matrix(ctl, pos, rot)
+                            create_transform_keys(objects=[ctl],
                                                 tx=True, ty=True, tz=True,
                                                 rx=True, ry=True, rz=True)
 
@@ -588,7 +647,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             cmds.currentTime(key, edit=True)
                             cmds.setAttr(source_space, source_value)
                             cmds.setKeyframe(source_space)
-                            pos, rot = getWorldMatrix(ctl)
+                            pos, rot = get_world_matrix(ctl)
                             matrixData.append((pos, rot))
 
                         # print intersected_frames
@@ -611,8 +670,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                             cmds.setAttr(target_space, target_value)
                             cmds.setKeyframe(target_space)
                             pos, rot = matrixData[i]
-                            applyWorldMatrix(ctl, pos, rot)
-                            createTransformKeys(objects=[ctl],
+                            apply_world_matrix(ctl, pos, rot)
+                            create_transform_keys(objects=[ctl],
                                                 tx=True, ty=True, tz=True,
                                                 rx=True, ry=True, rz=True)
 
@@ -625,11 +684,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             unlock_viewport()
             cmds.undoInfo(closeChunk=True)
 
-
-
-
-
-
     def setSpaceSwitch(self, frame, ctl, source_space, source_value,
                                          target_space, target_value):
         '''
@@ -637,22 +691,22 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         '''
         # get current frame's matrix
         cmds.currentTime(frame, edit=True)
-        pos, rot = getWorldMatrix(ctl)
+        pos, rot = get_world_matrix(ctl)
 
         # go to previous frame and key
         prev_frame = frame - 1.0
         cmds.currentTime(prev_frame, edit=True)
         cmds.setAttr(source_space, source_value)
         cmds.setKeyframe(source_space)
-        createTransformKeys(objects=[ctl], tx=True, ty=True,
+        create_transform_keys(objects=[ctl], tx=True, ty=True,
                             tz=True, rx=True, ry=True, rz=True)
 
         # return to current frame and apply original matrix
         cmds.currentTime(frame, edit=True)
         cmds.setAttr(target_space, target_value)
         cmds.setKeyframe(target_space)
-        applyWorldMatrix(ctl, pos, rot)
-        createTransformKeys(objects=[ctl], tx=True, ty=True, tz=True,
+        apply_world_matrix(ctl, pos, rot)
+        create_transform_keys(objects=[ctl], tx=True, ty=True, tz=True,
                                            rx=True, ry=True, rz=True)
 
     def mouseReleaseEvent(self, event):
@@ -666,13 +720,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         '''
         super(SpaceSwitchTool, self).closeEvent(event)
 
-mayaPtr = getMayaWindow()
+
+mayaPtr = get_maya_window()
 win = SpaceSwitchTool(mayaPtr)
 win.show()
-
-
-
-
 
 '''
 import sys
