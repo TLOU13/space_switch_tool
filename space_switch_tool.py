@@ -3,6 +3,7 @@ MODULE: space_switch_tool
 
 CLASSES:
     SpaceSwitchTool: class for main UI and space switch methods.
+    CustomIntValidator: class to reimplement the QIntValidator.
 """
 import logging
 from functools import partial
@@ -37,7 +38,7 @@ def unlock_viewport():
 
 
 def filter_invalid_objects(objects):
-    """Takes any list and filtesrs out None and non-existing nodes.
+    """Takes any list and filters out None and non-existing nodes.
 
     Args:
         objects (list): a list of any nodes.
@@ -56,9 +57,10 @@ def filter_invalid_objects(objects):
     return objs
 
 
-def create_transform_keys(objects=None, time=None, tx=False, ty=False, tz=False,
-                                                 rx=False, ry=False, rz=False,
-                                                 sx=False, sy=False, sz=False):
+def create_transform_keys(objects=None, time=None,
+                          tx=False, ty=False, tz=False,
+                          rx=False, ry=False, rz=False,
+                          sx=False, sy=False, sz=False):
     """Takes an object list and sets keys on the transform channels
     based on the flags given. It is primary used to deal with cmds.setKeyframe
     function so we can avoid repeating string formatting.
@@ -79,7 +81,7 @@ def create_transform_keys(objects=None, time=None, tx=False, ty=False, tz=False,
     """                
     objs = filter_invalid_objects(objects) or cmds.ls(selection=True)
     if not objs: # return if nothing is found
-        logging.info("No valid objects were found to create transform keys")
+        LOGGER.warning("No valid objects were found to create transform keys")
         return
 
     if time is None:
@@ -145,21 +147,29 @@ def channel_box_selection():
 
     # pair object and attribute together and check if they exist in Maya
     if m_obj and m_attr:
-        channels_sel.extend("%s.%s"%(loop_obj, loop_attr)
-                            for loop_obj in m_obj for loop_attr in m_attr
-                            if cmds.objExists("%s.%s"%(loop_obj, loop_attr)))
+        channels_sel.extend(
+            "{}.{}".format(loop_obj, loop_attr)
+            for loop_obj in m_obj for loop_attr in m_attr
+            if cmds.objExists("{}.{}".format(loop_obj, loop_attr))
+        )
     if s_obj and s_attr:
-        channels_sel.extend("%s.%s"%(loop_obj, loop_attr)
-                            for loop_obj in s_obj for loop_attr in s_attr
-                            if cmds.objExists("%s.%s"%(loop_obj, loop_attr)))
+        channels_sel.extend(
+            "{}.{}".format(loop_obj, loop_attr)
+            for loop_obj in s_obj for loop_attr in s_attr
+            if cmds.objExists("{}.{}".format(loop_obj, loop_attr))
+        )
     if h_obj and h_attr:
-        channels_sel.extend("%s.%s"%(loop_obj, loop_attr)
-                            for loop_obj in h_obj for loop_attr in h_attr
-                            if cmds.objExists("%s.%s"%(loop_obj, loop_attr)))
+        channels_sel.extend(
+            "{}.{}".format(loop_obj, loop_attr)
+            for loop_obj in h_obj for loop_attr in h_attr
+            if cmds.objExists("{}.{}".format(loop_obj, loop_attr))
+        )
     if o_obj and o_attr:
-        channels_sel.extend("%s.%s"%(loop_obj, loop_attr)
-                            for loop_obj in o_obj for loop_attr in o_attr
-                            if cmds.objExists("%s.%s"%(loop_obj, loop_attr)))
+        channels_sel.extend(
+            "{}.{}".format(loop_obj, loop_attr)
+            for loop_obj in o_obj for loop_attr in o_attr
+            if cmds.objExists("{}.{}".format(loop_obj, loop_attr))
+        )
      
     return channels_sel
 
@@ -172,7 +182,7 @@ def double_warning(msg, title='warning!'):
         msg (str): message to be displayed in warning and logging.
         title (str): window title of the QMessageBox.
     """  
-    logging.warning(msg)
+    LOGGER.warning(msg)
     QtWidgets.QMessageBox.warning(None, title, msg)
 
 
@@ -193,6 +203,7 @@ def get_world_matrix(ctl):
         pos = cmds.xform(ctl, query=True, translation=True, worldSpace=True)
         rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=True)
     else:
+        LOGGER.warning("This is not a transfomr node!")
         pos = None
         rot = None
 
@@ -262,7 +273,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self.setFixedWidth(500)
 
         # set label messages
-        self._instruction_msg = "\nPlease follow the instructions below\n"
+        self._instruction_msg = "\nPlease follow the instructions below:\n"
         self._default_source_label = ("--- select your current space "
                                       "switch attr, and load ---")
         self._default_target_label = ("--- switch to your target space switch "
@@ -279,47 +290,56 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                               query=True, maxTime=True)))
         
         # build widgets
-        warning_icon = QtWidgets.QApplication.style().standardIcon(
-                       QtWidgets.QStyle.SP_MessageBoxWarning)
-        warning_pixmap = QtGui.QPixmap(warning_icon.pixmap(32,32))
         self._warning_icon_label = QtWidgets.QLabel()
-        self._warning_icon_label.setPixmap(warning_pixmap)
         self._instruction_label = QtWidgets.QLabel(self._instruction_msg)
 
         self._load_ctl_btn = QtWidgets.QPushButton("Load Control")
-        self._load_ctl_btn.setFixedSize(90,30)
         self._load_ctl_label = QtWidgets.QLabel(self._default_ctl_label)
-        self._load_ctl_label.setAlignment(QtCore.Qt.AlignCenter)
         
         self._load_source_btn = QtWidgets.QPushButton("Load Source")
-        self._load_source_btn.setFixedSize(90,30)
         self._load_source_label = QtWidgets.QLabel(self._default_source_label)
-        self._load_source_label.setAlignment(QtCore.Qt.AlignCenter)
         
         self._load_target_btn = QtWidgets.QPushButton("Load Target")
-        self._load_target_btn.setFixedSize(90,30)
         self._load_target_label = QtWidgets.QLabel(self._default_target_label)
-        self._load_target_label.setAlignment(QtCore.Qt.AlignCenter)
               
         self._currentFrame_radbtn = QtWidgets.QRadioButton("current frame")
-        self._currentFrame_radbtn.setChecked(True)
         self._bakeKeyframes_radbtn = QtWidgets.QRadioButton("bake keyframes")
         self._everyFrame_radbtn = QtWidgets.QRadioButton("bake every frame")     
 
         self._set_time_range_chkbx = QtWidgets.QCheckBox("set time range")
         self._start_frame_field = QtWidgets.QLineEdit(self._start_frame)
-        self._start_frame_field.setValidator(customIntValidator())
-        self._start_frame_field.setFixedWidth(40)
         self._end_frame_field = QtWidgets.QLineEdit(self._end_frame)
-        self._end_frame_field.setValidator(customIntValidator())
-        self._end_frame_field.setFixedWidth(40)
         self._connect_label = QtWidgets.QLabel("to")
 
         self._swtich_btn = QtWidgets.QPushButton("Switch Space")
 
         # set up UI
+        self._set_widgets()
         self._set_layouts()
         self._connect_signals()
+
+    def _set_widgets(self):
+        '''Sets all parameters for the widgets.
+        '''
+        warning_icon = QtWidgets.QApplication.style().standardIcon(
+               QtWidgets.QStyle.SP_MessageBoxWarning)
+        warning_pixmap = QtGui.QPixmap(warning_icon.pixmap(32,32))
+        self._warning_icon_label.setPixmap(warning_pixmap)
+
+        self._load_ctl_btn.setFixedSize(90,30)
+        self._load_ctl_label.setAlignment(QtCore.Qt.AlignCenter)
+        
+        self._load_source_btn.setFixedSize(90,30)
+        self._load_source_label.setAlignment(QtCore.Qt.AlignCenter)
+        
+        self._load_target_btn.setFixedSize(90,30)
+        self._load_target_label.setAlignment(QtCore.Qt.AlignCenter)
+              
+        self._currentFrame_radbtn.setChecked(True)
+        self._start_frame_field.setValidator(customIntValidator())
+        self._start_frame_field.setFixedWidth(40)
+        self._end_frame_field.setValidator(customIntValidator())
+        self._end_frame_field.setFixedWidth(40)
 
     def _set_layouts(self):
         """Sets all layout components.
@@ -515,7 +535,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         cmds.undoInfo(openChunk=True)
         lock_viewport()
         # huge try block is used here to take care of undo chunk
-        # TODO: repalce it using Time Cache Decorator
+        # TODO: replace it using decorator
         try: 
             current_frame = cmds.currentTime(query=True)
             ctl = self._spaceSwitch_data_dict["target control"]
@@ -660,8 +680,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                         pos, rot = matrixData[i]
                         apply_world_matrix(ctl, pos, rot)
                         create_transform_keys(objects=[ctl],
-                                            tx=True, ty=True, tz=True,
-                                            rx=True, ry=True, rz=True)
+                                              tx=True, ty=True, tz=True,
+                                              rx=True, ry=True, rz=True)
 
                 # return to current frame
                 cmds.currentTime(current_frame, edit=True)
