@@ -253,7 +253,7 @@ class CustomIntValidator(QtGui.QIntValidator):
         if value == "":
             return QtGui.QValidator.Acceptable, value, pos
 
-        return super(customIntValidator, self).validate(value, pos)
+        return super(CustomIntValidator, self).validate(value, pos)
 
 
 class SpaceSwitchTool(QtWidgets.QDialog):
@@ -336,9 +336,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._load_target_label.setAlignment(QtCore.Qt.AlignCenter)
               
         self._currentFrame_radbtn.setChecked(True)
-        self._start_frame_field.setValidator(customIntValidator())
+        self._start_frame_field.setValidator(CustomIntValidator())
         self._start_frame_field.setFixedWidth(40)
-        self._end_frame_field.setValidator(customIntValidator())
+        self._end_frame_field.setValidator(CustomIntValidator())
         self._end_frame_field.setFixedWidth(40)
 
     def _set_layouts(self):
