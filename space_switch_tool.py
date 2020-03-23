@@ -11,6 +11,7 @@ from functools import partial
 import maya.mel as mel
 import maya.cmds as cmds
 import shiboken2 as shiboken
+import maya.api.OpenMaya as om
 import maya.OpenMayaUI as OpenMayaUI
 from PySide2 import QtWidgets, QtGui, QtCore
 
@@ -270,47 +271,97 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # set main QDialog parameters
         super(SpaceSwitchTool, self).__init__(parent)
         self.setWindowTitle("Space Switch Tool")
-        self.setFixedWidth(500)
+        self.setFixedWidth(550)
 
         # set label messages
         self._instruction_msg = "\nPlease follow the instructions below:\n"
-        self._default_source_label = ("--- select your current space "
-                                      "switch attr, and load ---")
-        self._default_target_label = ("--- switch to your target space switch "
-                                      "value, keep attr selected and load ---")
-        self._default_ctl_label = "--- select your target control ---"
+        self._default_source_lbl = ("--- select your current space "
+                                    "switch attr, and load ---")
+        self._default_target_lbl = ("--- switch to your target space switch "
+                                    "value, keep attr selected and load ---")
+        self._default_ctl_lbl = "--- select your target control ---"
+        self._default_empty_lbl = "--- empty ---"
 
         # declare and initialize variable
-        self._spaceSwitch_data_dict = {"source space":[],
-                                       "target space":[],
-                                       "target control":""}
+        self._space_switch_data_dict = {"target control":"",
+                                        "source space":[],
+                                        "target space":[]}
+        self._ikfk_switch_data_dict = {"shoulder joint":"",
+                                       "elbow joint":"",
+                                       "wrist joint":"",
+                                       "fk shoulder":"",
+                                       "fk elbow":"",
+                                       "fk wrist":"",
+                                       "fk switch":[],
+                                       "fk visibility":[], # assume 0 and 1
+                                       "ik elbow":"",
+                                       "ik wrist":"",
+                                       "ik switch":[],
+                                       "ik visibility":[]} # assume 0 and 1
         self._start_frame = str(int(cmds.playbackOptions(
                                 query=True, minTime=True)))
         self._end_frame = str(int(cmds.playbackOptions(
                               query=True, maxTime=True)))
         
-        # build widgets
-        self._warning_icon_label = QtWidgets.QLabel()
-        self._instruction_label = QtWidgets.QLabel(self._instruction_msg)
+        # build tab widgets
+        self._tabs = QtWidgets.QTabWidget()
+        self._space_switch_tab = QtWidgets.QWidget()
+        self._ik_fk_switch_tab = QtWidgets.QWidget()
 
+        # build instruction widgets
+        self._warning_icon_lbl = QtWidgets.QLabel()
+        self._instruction_lbl = QtWidgets.QLabel(self._instruction_msg)
+
+        # build space switch widgets
         self._load_ctl_btn = QtWidgets.QPushButton("Load Control")
-        self._load_ctl_label = QtWidgets.QLabel(self._default_ctl_label)
-        
+        self._load_ctl_lbl = QtWidgets.QLabel(self._default_ctl_lbl)
         self._load_source_btn = QtWidgets.QPushButton("Load Source")
-        self._load_source_label = QtWidgets.QLabel(self._default_source_label)
-        
+        self._load_source_lbl = QtWidgets.QLabel(self._default_source_lbl)
         self._load_target_btn = QtWidgets.QPushButton("Load Target")
-        self._load_target_label = QtWidgets.QLabel(self._default_target_label)
-              
+        self._load_target_lbl = QtWidgets.QLabel(self._default_target_lbl)
+        
+        # build ik/fk switch widgets
+        self._load_shoulder_jnt_btn = QtWidgets.QPushButton("Load Shoulder "
+                                                            "Joint")
+        self._load_shoulder_jnt_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_elbow_jnt_btn = QtWidgets.QPushButton("Load Elbow Joint")
+        self._load_elbow_jnt_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_wrist_jnt_btn = QtWidgets.QPushButton("Load Wrist Joint")
+        self._load_wrist_jnt_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_fk_shoulder_btn = QtWidgets.QPushButton("Load FK Shoulder")
+        self._load_fk_shoulder_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_fk_elbow_btn = QtWidgets.QPushButton("Load FK Elbow")
+        self._load_fk_elbow_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_fk_wrist_btn = QtWidgets.QPushButton("Load FK Wrist")
+        self._load_fk_wrist_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_fk_switch_btn = QtWidgets.QPushButton("Load FK Switch")
+        self._load_fk_switch_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_fk_vis_btn = QtWidgets.QPushButton("Load FK Visibility")
+        self._load_fk_vis_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_ik_elbow_btn = QtWidgets.QPushButton("Load IK Elbow")
+        self._load_ik_elbow_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_ik_wrist_btn = QtWidgets.QPushButton("Load IK Wrist")
+        self._load_ik_wrist_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_ik_switch_btn = QtWidgets.QPushButton("Load IK Switch")
+        self._load_ik_switch_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._load_ik_vis_btn = QtWidgets.QPushButton("Load IK Visibility")
+        self._load_ik_vis_lbl = QtWidgets.QLabel(self._default_empty_lbl)
+        self._ikfk_mode_btnGrp = QtWidgets.QButtonGroup(self)
+        self._ik_to_fk_radbtn = QtWidgets.QRadioButton("IK -> FK")
+        self._fk_to_ik_radbtn = QtWidgets.QRadioButton("FK -> IK")
+
+        # build extra option widgets
+        self._timeline_btnGrp = QtWidgets.QButtonGroup(self)
         self._currentFrame_radbtn = QtWidgets.QRadioButton("current frame")
         self._bakeKeyframes_radbtn = QtWidgets.QRadioButton("bake keyframes")
         self._everyFrame_radbtn = QtWidgets.QRadioButton("bake every frame")     
-
         self._set_time_range_chkbx = QtWidgets.QCheckBox("set time range")
         self._start_frame_field = QtWidgets.QLineEdit(self._start_frame)
         self._end_frame_field = QtWidgets.QLineEdit(self._end_frame)
-        self._connect_label = QtWidgets.QLabel("to")
+        self._connect_lbl = QtWidgets.QLabel("to")
+        self._time_range_widget = QtWidgets.QWidget() # allow enable / disable
 
+        # build execution widget
         self._swtich_btn = QtWidgets.QPushButton("Switch Space")
 
         # set up UI
@@ -321,89 +372,283 @@ class SpaceSwitchTool(QtWidgets.QDialog):
     def _set_widgets(self):
         '''Sets all parameters for the widgets.
         '''
-        warning_icon = QtWidgets.QApplication.style().standardIcon(
-               QtWidgets.QStyle.SP_MessageBoxWarning)
-        warning_pixmap = QtGui.QPixmap(warning_icon.pixmap(32,32))
-        self._warning_icon_label.setPixmap(warning_pixmap)
+        # set up tabs
+        self._tabs.addTab(self._space_switch_tab, "space switch") # index 0
+        self._tabs.addTab(self._ik_fk_switch_tab, "ik/fk switch") # index 1
 
+        # set instruction
+        warning_icon = QtWidgets.QApplication.style().standardIcon(
+            QtWidgets.QStyle.SP_MessageBoxWarning
+        )
+        warning_pixmap = QtGui.QPixmap(warning_icon.pixmap(32,32))
+        self._warning_icon_lbl.setPixmap(warning_pixmap)
+
+        # set space switch loading buttons
         self._load_ctl_btn.setFixedSize(90,30)
-        self._load_ctl_label.setAlignment(QtCore.Qt.AlignCenter)
-        
+        self._load_ctl_lbl.setAlignment(QtCore.Qt.AlignCenter)
         self._load_source_btn.setFixedSize(90,30)
-        self._load_source_label.setAlignment(QtCore.Qt.AlignCenter)
-        
+        self._load_source_lbl.setAlignment(QtCore.Qt.AlignCenter)     
         self._load_target_btn.setFixedSize(90,30)
-        self._load_target_label.setAlignment(QtCore.Qt.AlignCenter)
-              
+        self._load_target_lbl.setAlignment(QtCore.Qt.AlignCenter)
+
+        # set ik/fk switch loading buttons
+        self._load_shoulder_jnt_btn.setFixedSize(120,30)
+        self._load_shoulder_jnt_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_elbow_jnt_btn.setFixedSize(120,30)
+        self._load_elbow_jnt_lbl.setAlignment(QtCore.Qt.AlignCenter)     
+        self._load_wrist_jnt_btn.setFixedSize(120,30)
+        self._load_wrist_jnt_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_fk_shoulder_btn.setFixedSize(120,30)
+        self._load_fk_shoulder_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_fk_elbow_btn.setFixedSize(120,30)
+        self._load_fk_elbow_lbl.setAlignment(QtCore.Qt.AlignCenter)     
+        self._load_fk_wrist_btn.setFixedSize(120,30)
+        self._load_fk_wrist_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_fk_switch_btn.setFixedSize(120,30)
+        self._load_fk_switch_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_fk_vis_btn.setFixedSize(120,30)
+        self._load_fk_vis_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_ik_elbow_btn.setFixedSize(120,30)
+        self._load_ik_elbow_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_ik_wrist_btn.setFixedSize(120,30)
+        self._load_ik_wrist_lbl.setAlignment(QtCore.Qt.AlignCenter)     
+        self._load_ik_switch_btn.setFixedSize(120,30)
+        self._load_ik_switch_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._load_ik_vis_btn.setFixedSize(120,30)
+        self._load_ik_vis_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._ik_to_fk_radbtn.setChecked(True)
+        self._ikfk_mode_btnGrp.addButton(self._ik_to_fk_radbtn)
+        self._ikfk_mode_btnGrp.addButton(self._fk_to_ik_radbtn)
+        
+        # set extra options
+        self._timeline_btnGrp.addButton(self._currentFrame_radbtn)
+        self._timeline_btnGrp.addButton(self._bakeKeyframes_radbtn)
+        self._timeline_btnGrp.addButton(self._everyFrame_radbtn)
         self._currentFrame_radbtn.setChecked(True)
         self._start_frame_field.setValidator(CustomIntValidator())
         self._start_frame_field.setFixedWidth(40)
         self._end_frame_field.setValidator(CustomIntValidator())
         self._end_frame_field.setFixedWidth(40)
+        self._time_range_widget.setDisabled(True)
 
     def _set_layouts(self):
         """Sets all layout components.
         """
+        # initialize layouts
         master_lyt = QtWidgets.QVBoxLayout(self)
         instruction_lyt = QtWidgets.QHBoxLayout(self)
+        space_switch_lyt = QtWidgets.QVBoxLayout(self._space_switch_tab)
+        ik_fk_switch_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
+        ik_fk_switch_sub_lyt = QtWidgets.QHBoxLayout(self._ik_fk_switch_tab)
+        ik_fk_switch_sub1_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
+        ik_fk_switch_sub2_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
+
+        # initialize fk layouts
         load_ctl_lyt = QtWidgets.QHBoxLayout(self)
         load_source_lyt = QtWidgets.QHBoxLayout(self)
         load_target_lyt = QtWidgets.QHBoxLayout(self)
+
+        # initialize ik layouts
+        load_shoulder_jnt_lyt = QtWidgets.QHBoxLayout(self)
+        load_elbow_jnt_lyt = QtWidgets.QHBoxLayout(self)
+        load_wrist_jnt_lyt = QtWidgets.QHBoxLayout(self)
+        load_fk_shoulder_lyt = QtWidgets.QHBoxLayout(self)
+        load_fk_elbow_lyt = QtWidgets.QHBoxLayout(self)
+        load_fk_wrist_lyt = QtWidgets.QHBoxLayout(self)
+        load_fk_switch_lyt = QtWidgets.QHBoxLayout(self)
+        load_fk_vis_lyt = QtWidgets.QHBoxLayout(self)
+        load_ik_elbow_lyt = QtWidgets.QHBoxLayout(self)
+        load_ik_wrist_lyt = QtWidgets.QHBoxLayout(self)
+        load_ik_switch_lyt = QtWidgets.QHBoxLayout(self)
+        load_ik_vis_lyt = QtWidgets.QHBoxLayout(self)
+        ikfk_mode_lyt = QtWidgets.QHBoxLayout(self)
+
+        # initialize extra option layouts
         time_range_option_lyt = QtWidgets.QHBoxLayout(self)
-        self.time_range_widget = QtWidgets.QWidget() # allow enable / disable
-        self.time_range_widget.setDisabled(True)
-        time_range_lyt = QtWidgets.QHBoxLayout(self.time_range_widget)
+        time_range_lyt = QtWidgets.QHBoxLayout(self._time_range_widget)
         bake_mode_lyt = QtWidgets.QHBoxLayout(self)
 
+        # organize master layout
         master_lyt.addLayout(instruction_lyt)
-        master_lyt.addLayout(load_ctl_lyt)
-        master_lyt.addLayout(load_source_lyt)
-        master_lyt.addLayout(load_target_lyt)
+        master_lyt.addWidget(self._tabs)
         master_lyt.addLayout(bake_mode_lyt)
         master_lyt.addLayout(time_range_option_lyt)
         master_lyt.addWidget(self._swtich_btn)
 
+        # organize tab layouts
+        space_switch_lyt.addLayout(load_ctl_lyt)
+        space_switch_lyt.addLayout(load_source_lyt)
+        space_switch_lyt.addLayout(load_target_lyt)
+        space_switch_lyt.addStretch()
+        ik_fk_switch_lyt.addLayout(ik_fk_switch_sub_lyt)
+        ik_fk_switch_lyt.addLayout(ikfk_mode_lyt)
+        ik_fk_switch_sub_lyt.addLayout(ik_fk_switch_sub1_lyt)
+        ik_fk_switch_sub_lyt.addLayout(ik_fk_switch_sub2_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_shoulder_jnt_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_elbow_jnt_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_wrist_jnt_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_ik_switch_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_ik_vis_lyt)
+        ik_fk_switch_sub1_lyt.addLayout(load_ik_elbow_lyt)
+        ik_fk_switch_sub1_lyt.addStretch()
+        ik_fk_switch_sub2_lyt.addLayout(load_fk_shoulder_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(load_fk_elbow_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(load_fk_wrist_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(load_fk_switch_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(load_fk_vis_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(load_ik_wrist_lyt)
+        ik_fk_switch_sub2_lyt.addLayout(ikfk_mode_lyt)
+        ik_fk_switch_sub2_lyt.addStretch()
+
+        # organize instruction layouts
         instruction_lyt.addStretch()
-        instruction_lyt.addWidget(self._warning_icon_label)
-        instruction_lyt.addWidget(self._instruction_label)
+        instruction_lyt.addWidget(self._warning_icon_lbl)
+        instruction_lyt.addWidget(self._instruction_lbl)
         instruction_lyt.addStretch()
+
+        # organize space switch tab layouts
         load_ctl_lyt.addWidget(self._load_ctl_btn)
-        load_ctl_lyt.addWidget(self._load_ctl_label)
+        load_ctl_lyt.addWidget(self._load_ctl_lbl)
         load_source_lyt.addWidget(self._load_source_btn)
-        load_source_lyt.addWidget(self._load_source_label)
+        load_source_lyt.addWidget(self._load_source_lbl)
         load_target_lyt.addWidget(self._load_target_btn)
-        load_target_lyt.addWidget(self._load_target_label)
+        load_target_lyt.addWidget(self._load_target_lbl)
+
+        # organize ik/fk switch tab layouts
+        load_shoulder_jnt_lyt.addWidget(self._load_shoulder_jnt_btn)
+        load_shoulder_jnt_lyt.addWidget(self._load_shoulder_jnt_lbl)
+        load_elbow_jnt_lyt.addWidget(self._load_elbow_jnt_btn)
+        load_elbow_jnt_lyt.addWidget(self._load_elbow_jnt_lbl)
+        load_wrist_jnt_lyt.addWidget(self._load_wrist_jnt_btn)
+        load_wrist_jnt_lyt.addWidget(self._load_wrist_jnt_lbl)
+        load_fk_shoulder_lyt.addWidget(self._load_fk_shoulder_btn)
+        load_fk_shoulder_lyt.addWidget(self._load_fk_shoulder_lbl)
+        load_fk_elbow_lyt.addWidget(self._load_fk_elbow_btn)
+        load_fk_elbow_lyt.addWidget(self._load_fk_elbow_lbl)
+        load_fk_wrist_lyt.addWidget(self._load_fk_wrist_btn)
+        load_fk_wrist_lyt.addWidget(self._load_fk_wrist_lbl)
+        load_fk_switch_lyt.addWidget(self._load_fk_switch_btn)
+        load_fk_switch_lyt.addWidget(self._load_fk_switch_lbl)
+        load_fk_vis_lyt.addWidget(self._load_fk_vis_btn)
+        load_fk_vis_lyt.addWidget(self._load_fk_vis_lbl)
+        load_ik_elbow_lyt.addWidget(self._load_ik_elbow_btn)
+        load_ik_elbow_lyt.addWidget(self._load_ik_elbow_lbl)
+        load_ik_wrist_lyt.addWidget(self._load_ik_wrist_btn)
+        load_ik_wrist_lyt.addWidget(self._load_ik_wrist_lbl)
+        load_ik_switch_lyt.addWidget(self._load_ik_switch_btn)
+        load_ik_switch_lyt.addWidget(self._load_ik_switch_lbl)
+        load_ik_vis_lyt.addWidget(self._load_ik_vis_btn)
+        load_ik_vis_lyt.addWidget(self._load_ik_vis_lbl)
+        ikfk_mode_lyt.addStretch()
+        ikfk_mode_lyt.addWidget(self._ik_to_fk_radbtn)
+        ikfk_mode_lyt.addWidget(self._fk_to_ik_radbtn)
+
+        # organize extra option layouts
         bake_mode_lyt.addWidget(self._currentFrame_radbtn)
         bake_mode_lyt.addWidget(self._bakeKeyframes_radbtn)
         bake_mode_lyt.addWidget(self._everyFrame_radbtn)
         bake_mode_lyt.addStretch()
         time_range_option_lyt.addWidget(self._set_time_range_chkbx)
-        time_range_option_lyt.addWidget(self.time_range_widget)
+        time_range_option_lyt.addWidget(self._time_range_widget)
         time_range_lyt.addWidget(self._start_frame_field)
-        time_range_lyt.addWidget(self._connect_label)
+        time_range_lyt.addWidget(self._connect_lbl)
         time_range_lyt.addWidget(self._end_frame_field)
         time_range_lyt.addStretch()
 
     def _connect_signals(self):
         """Connects each widget to their method.
         """
+        # connect space switch buttons
         self._load_source_btn.clicked.connect(partial(self.load_attr_value,
-                                              "source space"))
+                                                      "source space",
+                                                      self._load_source_lbl))
         self._load_target_btn.clicked.connect(partial(self.load_attr_value,
-                                              "target space"))
-        self._load_ctl_btn.clicked.connect(self.load_target_control)
-        self._swtich_btn.clicked.connect(self.switch_space)
+                                                      "target space",
+                                                      self._load_target_lbl))
+        self._load_ctl_btn.clicked.connect(partial(self.load_target_control, 
+                                                   "target control",
+                                                   self._load_ctl_lbl))
+
+        # connect ik/fk switch buttons
+        self._load_shoulder_jnt_btn.clicked.connect(
+            partial(self.load_target_control,
+                    "shoulder joint",
+                    self._load_shoulder_jnt_lbl,
+                    "joint")
+        )
+        self._load_elbow_jnt_btn.clicked.connect(
+            partial(self.load_target_control,
+                    "elbow joint",
+                    self._load_elbow_jnt_lbl,
+                    "joint")
+        )
+        self._load_wrist_jnt_btn.clicked.connect(
+            partial(self.load_target_control, 
+                    "wrist joint",
+                    self._load_wrist_jnt_lbl,
+                    "joint")
+        )
+        self._load_fk_shoulder_btn.clicked.connect(
+            partial(self.load_target_control,
+                    "fk shoulder",
+                    self._load_fk_shoulder_lbl)
+        )
+        self._load_fk_elbow_btn.clicked.connect(
+            partial(self.load_target_control,
+                    "fk elbow",
+                    self._load_fk_elbow_lbl)
+        )
+        self._load_fk_wrist_btn.clicked.connect(
+            partial(self.load_target_control, 
+                    "fk wrist",
+                    self._load_fk_wrist_lbl)
+        )
+        self._load_fk_switch_btn.clicked.connect(
+            partial(self.load_attr_value,
+                    "fk switch",
+                    self._load_fk_switch_lbl)
+        )
+        self._load_fk_vis_btn.clicked.connect(
+            partial(self.load_attr_value,
+                    "fk visibility",
+                    self._load_fk_vis_lbl)
+        )
+        self._load_ik_elbow_btn.clicked.connect(
+            partial(self.load_target_control,
+                    "ik elbow",
+                    self._load_ik_elbow_lbl)
+        )
+        self._load_ik_wrist_btn.clicked.connect(
+            partial(self.load_target_control, 
+                    "ik wrist",
+                    self._load_ik_wrist_lbl)
+        )
+        self._load_ik_switch_btn.clicked.connect(
+            partial(self.load_attr_value,
+                    "ik switch",
+                    self._load_ik_switch_lbl)
+        )
+        self._load_ik_vis_btn.clicked.connect(
+            partial(self.load_attr_value,
+                    "ik visibility",
+                    self._load_ik_vis_lbl)
+        )
+        
+        # connect extra option
         self._set_time_range_chkbx.stateChanged.connect(
             self._toggle_time_range
         )
         self._start_frame_field.editingFinished.connect(self._set_start_frame)
         self._end_frame_field.editingFinished.connect(self._set_end_frame)
 
+        # connect execution
+        self._swtich_btn.clicked.connect(self.execute_switch)
+
     def _toggle_time_range(self):
         """When checked, makes custom time range section available for user.
         """
         state = self._set_time_range_chkbx.isChecked()
-        self.time_range_widget.setEnabled(state)
+        self._time_range_widget.setEnabled(state)
 
     def _set_start_frame(self):
         """When edited, checks if the frame number entered is valid. Modifies
@@ -441,66 +686,91 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             self._start_frame_field.blockSignals(False)
             self._start_frame = new_value_str
 
-    def load_attr_value(self, key):
-        """Takes a key value and stores the user selection into internal data
-        using that key.
+    def load_attr_value(self, key, lbl):
+        """Takes a key value and stores the attribute selected by the user into
+        internal data using that key, also edits the label.
 
         Args:
-            key (str): can be 'source space' or 'target space'.
+            key (str): decides which attribute key to edit in
+                       self._space_switch_data_dict.
+            btn (QLabel): decides which label to change 
         """
-        data = []
         sel = cmds.ls(selection=True)
         attr = channel_box_selection()
 
         # only allow user to select one object and one attribute
         if len(sel) is 1 and len(attr) is 1:
             value = cmds.getAttr(attr[0])
-            self._spaceSwitch_data_dict[key] = [attr[0], value]
-            if key == "source space":
-                self._load_source_label.setText(
-                    "{}  {}".format(attr[0], value)
-                )
-            else: # key == "target space"
-                self._load_target_label.setText(
-                    "{}  {}".format(attr[0], value)
-                )
+            if key in ["source space", "target space"]:
+                self._space_switch_data_dict[key] = [attr[0], value]
+            else:
+                self._ikfk_switch_data_dict[key] = [attr[0], value]
+            lbl.setText("{}  {}".format(attr[0], value))
             return # escape from here if selected attribute is valid
 
         # if selection is invalid, restore to default instruction
-        self._spaceSwitch_data_dict[key] = []
         if key == "source space":
+            self._space_switch_data_dict[key] = []
             double_warning(
-                "invalid selection\n{}".format(self._default_source_label)
+                "invalid selection!\n{}".format(self._default_source_lbl)
             )
-            self._load_source_label.setText(self._default_source_label)
-        else:# key == "target space"
-            double_warning(
-                "invalid selection\n{}".format(self._default_target_label)
-            )
-            self._load_target_label.setText(self._default_target_label)
+            lbl.setText(self._default_source_lbl)
 
-    def load_target_control(self):
-        """Loads target control into UI's internal data.
+        elif key == "target space":
+            self._space_switch_data_dict[key] = []
+            double_warning(
+                "invalid selection!\n{}".format(self._default_target_lbl)
+            )
+            lbl.setText(self._default_target_lbl)
+
+        else: # attributes for ik/fk switch
+            self._ikfk_switch_data_dict[key] = []
+            double_warning(
+                "invalid selection!\n--- please load {} ---".format(key)
+            )
+            lbl.setText(self._default_empty_lbl)
+
+    def load_target_control(self, key, lbl, typ="transform"):
+        """Takes a key value and stores the control selected by the user into
+        internal data using that key, also edits the label.
+
+        Args:
+            key (str): decides which control key to edit in
+                       self._space_switch_data_dict.
+            btn (QLabel): decides which label to change
+            typ (str): limits the selected object type
         """
-        sel = cmds.ls(selection=True, type="transform")
-        if len(sel) == 1:
-            self._load_ctl_label.setText(sel[0])
-            self._spaceSwitch_data_dict["target control"] = sel[0]
-        else:
-            double_warning(
-                "invalid selection\n{}".format(self._default_ctl_label)
-            )
-            self._spaceSwitch_data_dict["target control"] = ""
-            self._load_ctl_label.setText(self._default_ctl_label)
+        sel = cmds.ls(selection=True, type=typ)
+        if len(sel) == 1: # only allow one selected object
+            if key == "target control":
+                self._space_switch_data_dict[key] = sel[0]
+            else:
+                self._ikfk_switch_data_dict[key] = sel[0]
+            lbl.setText(sel[0])
+            return # escape from here if selected transform is valid
 
-    def validate_data(self):
-        """Validates all internal data right before executing the
-        switch_space method.
+        # if selection is invalid, restore to default instruction
+        if key == "target control": # if none or more than one control selected
+            self._space_switch_data_dict[key] = ""
+            double_warning(
+                "invalid selection!\n{}".format(self._default_ctl_lbl)
+            )
+            lbl.setText(self._default_ctl_lbl)
+        else: # controls for ik/fk switch
+            self._ikfk_switch_data_dict[key] = ""
+            double_warning(
+                "invalid selection!\n--- please select {} ---".format(key)
+            )
+            lbl.setText(self._default_empty_lbl)
+
+    def validate_space_switch_data(self):
+        """Validates all required data right before executing the
+        space_switch method.
 
         Returns:
             bool: True if successful, False otherwise.
         """
-        for key, value in self._spaceSwitch_data_dict.iteritems():
+        for key, value in self._space_switch_data_dict.iteritems():
             if not value: # check if user input is empty
                 return False
             if key == "source space" or key == "target space":
@@ -508,7 +778,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                 # check if the attributes still exist in the scene
                 if not cmds.attributeQuery(attr, node=node, exists=True):
                     return False
-            else: # "target control"
+            else: # key == "target control"
                 # check if the control still exist in the scene
                 if not cmds.objExists(value):
                     return False
@@ -516,7 +786,40 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # all user inputs are still valid
         return True
 
-    def switch_space(self):
+    def validate_ikfk_switch_data(self):
+        """Validates all required data right before executing the
+        ikfk_switch method.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        for key, value in self._ikfk_switch_data_dict.iteritems():
+            if not value: # check if user input is empty
+                return False
+            if key in ["fk switch", "ik switch",
+                       "fk visibility", "ik visibility"]:
+                node, attr = value[0].split(".")
+                # check if the attributes still exist in the scene
+                if not cmds.attributeQuery(attr, node=node, exists=True):
+                    return False
+            else: # key == control or joint
+                # check if the object still exist in the scene
+                if not cmds.objExists(value):
+                    return False
+
+        # all user inputs are still valid
+        return True
+
+    def execute_switch(self):
+        """Run the switch operation based on the tab loaded, either
+        space switch or ik/fk switch.
+        """
+        if self._tabs.currentWidget() is self._space_switch_tab:
+            self.space_switch()
+        else: # self._tabs.currentWidget() is self._ik_fk_switch_tab
+            self.ikfk_switch()
+
+    def space_switch(self):
         """Executes the main space switch operation using internal data.
 
         TODO: check what happen if user have other space switch in between
@@ -526,9 +829,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly
-        if not self.validate_data():
+        if not self.validate_space_switch_data():
             double_warning(
-                "Selected attribute is invalid! Please follow instruction!"
+                "Attributes and control are invalid!"
+                "\nPlease follow instruction!"
             )
             return
 
@@ -538,11 +842,11 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # TODO: replace it using decorator
         try: 
             current_frame = cmds.currentTime(query=True)
-            ctl = self._spaceSwitch_data_dict["target control"]
-            source_space = self._spaceSwitch_data_dict["source space"][0]
-            source_value = self._spaceSwitch_data_dict["source space"][1]
-            target_space = self._spaceSwitch_data_dict["target space"][0]
-            target_value = self._spaceSwitch_data_dict["target space"][1]
+            ctl = self._space_switch_data_dict["target control"]
+            source_space = self._space_switch_data_dict["source space"][0]
+            source_value = self._space_switch_data_dict["source space"][1]
+            target_space = self._space_switch_data_dict["target space"][0]
+            target_value = self._space_switch_data_dict["target space"][1]
 
             if self._currentFrame_radbtn.isChecked():
                 self.set_space_switch(current_frame, ctl,
@@ -729,6 +1033,143 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         apply_world_matrix(ctl, pos, rot)
         create_transform_keys(objects=[ctl], tx=True, ty=True, tz=True,
                               rx=True, ry=True, rz=True)
+
+    def ikfk_switch(self):
+        """Executes the main ik/fk switch operation using internal data.
+
+        TODO: check what happen if user have other space switch in between
+              the set time range.
+
+        TODO: too long at the moment, figure out a way to break this method up.
+        """
+        # check internal data to make sure user did not remove or rename stuffs
+        # from the scene randomly
+        
+        # temp
+        # self._ikfk_switch_data_dict["shoulder joint"] = "max:IKXShoulder_L"
+        # self._ikfk_switch_data_dict["elbow joint"] = "max:IKXElbow_L"
+        # self._ikfk_switch_data_dict["wrist joint"] = "max:IKXWrist_L"
+        
+        # self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
+        # self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
+        # self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
+        # self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
+        # self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
+        # self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
+        # self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
+        # self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
+        # self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
+        # self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
+        # self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
+        # self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
+        # print self._ikfk_switch_data_dict
+
+        # import maya.api.OpenMaya as om
+        # a = om.MVector(10,10,0)
+        # b = om.MVector(5,5,1)
+        # c = (a - b) * 0.5 + b
+        # print c.x, c.y, c.z
+             
+        if not self.validate_ikfk_switch_data():
+            double_warning(
+                "Either joints, controls or attributes loaded are invalid!"
+                "Please read the tooltip of each button for instruction."
+            )
+            return
+
+        current_frame = cmds.currentTime(query=True)
+        prev_frame = current_frame - 1.0
+        shoulder_jnt = self._ikfk_switch_data_dict["shoulder joint"]
+        elbow_jnt = self._ikfk_switch_data_dict["elbow joint"]
+        wrist_jnt = self._ikfk_switch_data_dict["wrist joint"]
+        fk_shoulder = self._ikfk_switch_data_dict["fk shoulder"]
+        fk_elbow = self._ikfk_switch_data_dict["fk elbow"]
+        fk_wrist = self._ikfk_switch_data_dict["fk wrist"]
+        fk_switch_attr = self._ikfk_switch_data_dict["fk switch"][0]
+        fk_switch_value = self._ikfk_switch_data_dict["fk switch"][1]
+        fk_vis_attr = self._ikfk_switch_data_dict["fk visibility"][0]
+        fk_vis_value = self._ikfk_switch_data_dict["fk visibility"][1]
+        ik_elbow = self._ikfk_switch_data_dict["ik elbow"]
+        ik_wrist = self._ikfk_switch_data_dict["ik wrist"]
+        ik_switch_attr = self._ikfk_switch_data_dict["ik switch"][0]
+        ik_switch_value = self._ikfk_switch_data_dict["ik switch"][1]
+        ik_vis_attr = self._ikfk_switch_data_dict["ik visibility"][0]
+        ik_vis_value = self._ikfk_switch_data_dict["ik visibility"][1]
+
+        # get joint position and rotation
+        shoulder_pos, should_rot = get_world_matrix(shoulder_jnt)
+        elbow_pos, elbow_rot = get_world_matrix(elbow_jnt)
+        wrist_pos, wrist_rot = get_world_matrix(wrist_jnt)
+
+        if self._ik_to_fk_radbtn.isChecked():
+            # go to previous frame            
+            cmds.currentTime(prev_frame, edit=True)
+            for fk in [fk_shoulder, fk_elbow, fk_wrist]:
+                # hold down previous position     
+                create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
+            cmds.setKeyframe(fk_switch_attr)
+            cmds.setKeyframe(fk_vis_attr)
+            cmds.setKeyframe(ik_vis_attr)
+
+            # return to current frame
+            cmds.currentTime(current_frame, edit=True)
+            cmds.setAttr(fk_switch_attr, fk_switch_value)
+            cmds.setKeyframe(fk_switch_attr)
+            cmds.setAttr(fk_vis_attr, int(fk_vis_value))
+            cmds.setKeyframe(fk_vis_attr)
+            cmds.setAttr(ik_vis_attr, int(ik_vis_value))
+            cmds.setKeyframe(ik_vis_attr)
+            for fk, value in [[fk_shoulder, should_rot], [fk_elbow, elbow_rot],
+                              [fk_wrist, wrist_rot]]:
+                cmds.xform(fk, rotation=value, worldSpace=True)
+                create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
+
+        else: # self._fk_to_ik_radbtn.isChecked()
+            # vector math
+            shoulder_jnt_vector = om.MVector(shoulder_pos)
+            elbow_jnt_vector = om.MVector(elbow_pos)
+            wrist_jnt_vector = om.MVector(wrist_pos)
+            midpoint_vector = ((wrist_jnt_vector - shoulder_jnt_vector) * 0.5
+                               + shoulder_jnt_vector)
+            aim_vector = ((elbow_jnt_vector - midpoint_vector) * 4
+                          + midpoint_vector)
+            new_elbow_pos = (aim_vector.x, aim_vector.y, aim_vector.z)
+            
+            # loc1 = cmds.spaceLocator()[0]
+            # cmds.setAttr("{}.t".format(loc1), *elbow_pos)
+            # loc2 = cmds.spaceLocator()[0]
+            # cmds.setAttr("{}.t".format(loc2), midpoint_vector.x, midpoint_vector.y, midpoint_vector.z)
+            # loc3 = cmds.spaceLocator()[0]
+            # cmds.setAttr("{}.t".format(loc3), *new_elbow_pos)
+            # return
+            
+            # go to previous frame            
+            cmds.currentTime(prev_frame, edit=True)
+            create_transform_keys(objects=[ik_wrist],
+                                  tx=True, ty=True, tz=True,
+                                  rx=True, ry=True, rz=True)   
+            create_transform_keys(objects=[ik_elbow],
+                                  tx=True, ty=True, tz=True)
+            cmds.setKeyframe(ik_switch_attr)
+            cmds.setKeyframe(ik_vis_attr)
+            cmds.setKeyframe(fk_vis_attr)
+
+            # return to current frame
+            cmds.currentTime(current_frame, edit=True)
+            cmds.setAttr(ik_switch_attr, ik_switch_value)
+            cmds.setKeyframe(ik_switch_attr)
+            cmds.setAttr(ik_vis_attr, int(ik_vis_value))
+            cmds.setKeyframe(ik_vis_attr)
+            cmds.setAttr(fk_vis_attr, int(fk_vis_value))
+            cmds.setKeyframe(fk_vis_attr)
+            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot)
+            # the orientation of this one is broken, could it be rotate order? ask Vineet!
+            create_transform_keys(objects=[ik_wrist],
+                                  tx=True, ty=True, tz=True,
+                                  rx=True, ry=True, rz=True)
+            cmds.xform(ik_elbow, translation=new_elbow_pos, worldSpace=True)
+            create_transform_keys(objects=[ik_elbow],
+                                  tx=True, ty=True, tz=True)
 
     def mouseReleaseEvent(self, event):
         """Makes sure when user clicks on the UI it will set UI in focus.
