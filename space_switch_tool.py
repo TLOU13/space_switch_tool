@@ -19,6 +19,102 @@ from PySide2 import QtWidgets, QtGui, QtCore
 LOGGER = logging.getLogger(__name__)
 
 
+def to_list(nodes):
+    """check the input, if gets a single node, put it in a list, pass if gets
+    a list, and returns None if not a string or list.
+
+    Args:
+        nodes (str|list): one or multiple nodes
+
+    Returns:
+        list: a list of nodes.
+    """
+    # check data type, make sure turn single object into list
+    if isinstance(nodes, basestring):
+        nodes = [nodes]
+    elif isinstance(nodes, list): # need to modify to accept () or {} type?
+        pass
+    else:
+        nodes = None
+
+    return nodes
+
+
+def check_node_type(nodes, checkTypes=["transform"]):
+    """check the node types of a list of nodes, return True if they all
+    match the given type, False if not.
+
+    Args:
+        nodes (str|list): one or multiple nodes
+        checkTypes (str|list): any node type in Maya
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    # check data type, make sure turn single object into list
+    nodes = to_list(nodes)
+    checkTypes = to_list(checkTypes)
+    if nodes is None or checkTypes is None: # if none str or list were given
+        return False
+
+    for node in nodes:
+        if cmds.nodeType(node) not in checkTypes:
+            return False
+
+    return True
+
+
+def check_rotate_order(source, target):
+    """query the rotate orders of source and target and check if they are
+    identical, raise warning if not.
+
+    Args:
+        source (str): a source transform node.
+        target (str): a target transform node.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    # check if inputs are transform or joint nodes
+    # only these two types of nodes have rotate order (?)
+    if check_node_type([source, target], ["transform", "joint"]):
+        source_rotateOrder = cmds.xform(source, query=True, rotateOrder=True)
+        target_rotateOrder = cmds.xform(target, query=True, rotateOrder=True)
+        if source_rotateOrder == target_rotateOrder:
+            return True
+
+    return False
+
+
+def constrain_move_key(driver, driven, constraintType):
+    """Taken from Veronica ikfk matching script, instead of using xform, which
+    is behaving inconsistently, use constraint, get the value and apply.
+
+    Args:
+        driver (str): a parent transform node.
+        driven (str): a child transform node.
+        constraintType (str): any Maya constraint type.
+
+    Returns:
+        list: a list of nodes that is not None and exists in Maya.
+    """
+    # create a hold positio locator at where driver is (avoid cycle error)  
+    loc = cmds.spaceLocator(name="temp")[0]
+    cmds.parent(loc, driver)
+    cmds.setAttr("{}.translate".format(loc), 0, 0, 0)
+    cmds.setAttr("{}.rotate".format(loc), 0, 0, 0)
+    cmds.parent(loc, world=True)
+
+    execStr = ('con = cmds.%s(loc, driven, maintainOffset=False)[0]'
+               % constraintType)
+    exec(execStr)
+    location = cmds.xform(driven, query=True, translation=True,
+                          worldSpace=True)
+    rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
+    cmds.delete(con, loc)
+    return location, rotation
+
+
 def lock_viewport():
     """Finds Maya viewport and locks it down to save viewport feedback time.
     """
@@ -187,7 +283,7 @@ def double_warning(msg, title='warning!'):
     QtWidgets.QMessageBox.warning(None, title, msg)
 
 
-def get_world_matrix(ctl):
+def get_world_matrix(ctl, ws_pos=True, ws_rot=True):
     """Takes one transform node and returns its position and rotation
     in world space.
 
@@ -201,8 +297,8 @@ def get_world_matrix(ctl):
     # check if ctl exists and is a transform node
     transform = cmds.ls(ctl, type="transform")
     if transform: # TODO: log this
-        pos = cmds.xform(ctl, query=True, translation=True, worldSpace=True)
-        rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=True)
+        pos = cmds.xform(ctl, query=True, translation=True, worldSpace=ws_pos)
+        rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=ws_rot)
     else:
         LOGGER.warning("This is not a transfomr node!")
         pos = None
@@ -211,7 +307,7 @@ def get_world_matrix(ctl):
     return pos, rot
 
 
-def apply_world_matrix(ctl, pos, rot):
+def apply_world_matrix(ctl, pos, rot, ws_pos=True, ws_rot=True):
     """Takes one transform node and a set of world position and
     rotation, and applies the latter on the former.
 
@@ -223,8 +319,8 @@ def apply_world_matrix(ctl, pos, rot):
     # check if ctl exists and is a transform node
     transform = cmds.ls(ctl, type="transform")
     if transform:
-        cmds.xform(ctl, translation=pos, worldSpace=True)
-        cmds.xform(ctl, rotation=rot, worldSpace=True)
+        cmds.xform(ctl, translation=pos, worldSpace=ws_pos)
+        cmds.xform(ctl, rotation=rot, worldSpace=ws_rot)
 
 
 def get_maya_window():
@@ -826,6 +922,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
               the set time range.
 
         TODO: too long at the moment, figure out a way to break this method up.
+
+        TODO: need to check rotate order, otherwise bad!
         """
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly
@@ -1044,31 +1142,34 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly
-        
-        # temp
-        # self._ikfk_switch_data_dict["shoulder joint"] = "max:IKXShoulder_L"
-        # self._ikfk_switch_data_dict["elbow joint"] = "max:IKXElbow_L"
-        # self._ikfk_switch_data_dict["wrist joint"] = "max:IKXWrist_L"
-        
-        # self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
-        # self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
-        # self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
-        # self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
-        # self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
-        # self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
-        # self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
-        # self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
-        # self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
-        # self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
-        # self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
-        # self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
-        # print self._ikfk_switch_data_dict
 
-        # import maya.api.OpenMaya as om
-        # a = om.MVector(10,10,0)
-        # b = om.MVector(5,5,1)
-        # c = (a - b) * 0.5 + b
-        # print c.x, c.y, c.z
+        # test using Norman 
+        self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
+        self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
+        self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
+        self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
+        self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
+        self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
+        self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
+        self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
+        self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
+        self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
+        self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
+        self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
+        
+        # test using Caroline     
+        self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
+        self._ikfk_switch_data_dict["elbow joint"] = "CarolineRig_v4_REF:rig_left_elbow"
+        self._ikfk_switch_data_dict["wrist joint"] = "CarolineRig_v4_REF:rig_left_wrist"
+        self._ikfk_switch_data_dict["ik wrist"] = "CarolineRig_v4_REF:ctl_ik_left_hand"
+        self._ikfk_switch_data_dict["ik elbow"] = "CarolineRig_v4_REF:ctl_ik_left_elbow"
+        self._ikfk_switch_data_dict["fk visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
+        self._ikfk_switch_data_dict["ik visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
+        self._ikfk_switch_data_dict["ik switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
+        self._ikfk_switch_data_dict["fk switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
+        self._ikfk_switch_data_dict["fk shoulder"] = "CarolineRig_v4_REF:ctl_fk_left_shoulder"
+        self._ikfk_switch_data_dict["fk elbow"] = "CarolineRig_v4_REF:ctl_fk_left_elbow"
+        self._ikfk_switch_data_dict["fk wrist"] = "CarolineRig_v4_REF:ctl_fk_left_wrist"
              
         if not self.validate_ikfk_switch_data():
             double_warning(
@@ -1096,12 +1197,52 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         ik_vis_attr = self._ikfk_switch_data_dict["ik visibility"][0]
         ik_vis_value = self._ikfk_switch_data_dict["ik visibility"][1]
 
-        # get joint position and rotation
+        # TODO: maybe integrate this with more clarity
+        # check rotate order, give it a warning if something is wrong
+        rotate_order_flag = False
+        msg = ("The following joints and FK controls do not "
+               "share the same rotate order:\n\n")
+        for jnt, ctl in [[shoulder_jnt, fk_shoulder], [elbow_jnt, fk_elbow],
+                         [wrist_jnt, fk_wrist]]:
+            if check_rotate_order(jnt, ctl) is False:
+                msg += "{}, {}\n".format(jnt, ctl)
+                rotate_order_flag = True
+
+        if rotate_order_flag:
+            msg += "\nThe switch result may be incorrect, continue?"
+            buttons = (QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            result = QtWidgets.QMessageBox.warning(None,
+                                                   'Inconsistency Warning!',
+                                                   msg, buttons)
+            if result == QtWidgets.QMessageBox.No:
+                return
+
+        # HOW TO FIX IT!
+        # zero out control first, return both ik and fk to the same position
+        # change rotate order on fk controls (same as joints)
+        # reposition the control (ik)
+        # run tool
+
+        # get joint position and rotation in world space
         shoulder_pos, should_rot = get_world_matrix(shoulder_jnt)
         elbow_pos, elbow_rot = get_world_matrix(elbow_jnt)
         wrist_pos, wrist_rot = get_world_matrix(wrist_jnt)
 
+        # get joint position and rotation
+        # shoulder_pos, should_rot = get_world_matrix(shoulder_jnt, ws_rot=False)
+        # elbow_pos, elbow_rot = get_world_matrix(elbow_jnt, ws_rot=False)
+        # wrist_pos, wrist_rot = get_world_matrix(wrist_jnt, ws_rot=False)
+
         if self._ik_to_fk_radbtn.isChecked():
+            
+            # should_rot = cmds.xform(shoulder_jnt, query=True, rotation=True)
+            # elbow_rot = cmds.xform(elbow_jnt, query=True, rotation=True)
+            # wrist_rot = cmds.xform(wrist_jnt, query=True, rotation=True)
+
+            # should_rot = cmds.getAttr("{}.rotate".format(shoulder_jnt))[0]
+            # elbow_rot = cmds.getAttr("{}.rotate".format(elbow_jnt))[0]
+            # wrist_rot = cmds.getAttr("{}.rotate".format(wrist_jnt))[0]
+
             # go to previous frame            
             cmds.currentTime(prev_frame, edit=True)
             for fk in [fk_shoulder, fk_elbow, fk_wrist]:
@@ -1115,13 +1256,28 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             cmds.currentTime(current_frame, edit=True)
             cmds.setAttr(fk_switch_attr, fk_switch_value)
             cmds.setKeyframe(fk_switch_attr)
-            cmds.setAttr(fk_vis_attr, int(fk_vis_value))
-            cmds.setKeyframe(fk_vis_attr)
-            cmds.setAttr(ik_vis_attr, int(ik_vis_value))
-            cmds.setKeyframe(ik_vis_attr)
+            # cmds.setAttr(fk_vis_attr, int(fk_vis_value))
+            # cmds.setKeyframe(fk_vis_attr)
+            # cmds.setAttr(ik_vis_attr, int(ik_vis_value)) # does not work for some set up like Caroline
+            # cmds.setKeyframe(ik_vis_attr)
+
+            # why does this work but not mine
+                       
+            # cmds.xform(fk_shoulder, rotation=should_rot)     
+            # cmds.xform(fk_elbow, rotation=elbow_rot)    
+            # cmds.xform(fk_wrist, rotation=wrist_rot)
+            # cmds.setAttr("{}.rotate".format(fk_shoulder), *should_rot)
+            # cmds.setAttr("{}.rotateY".format(fk_elbow), elbow_rot[1])
+            # cmds.setAttr("{}.rotate".format(fk_wrist), *wrist_rot)
+            # create_transform_keys(objects=[fk_shoulder, fk_elbow, fk_wrist],
+            #                       rx=True, ry=True, rz=True)
+
             for fk, value in [[fk_shoulder, should_rot], [fk_elbow, elbow_rot],
                               [fk_wrist, wrist_rot]]:
-                cmds.xform(fk, rotation=value, worldSpace=True)
+                cmds.xform(fk, rotation=value, worldSpace=True) # apply in world space
+                # cmds.xform(fk, rotation=value) # apply in local space
+                # print value
+                # cmds.setAttr("{}.rotate".format(fk), *value)
                 create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
 
         else: # self._fk_to_ik_radbtn.isChecked()
@@ -1158,11 +1314,15 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             cmds.currentTime(current_frame, edit=True)
             cmds.setAttr(ik_switch_attr, ik_switch_value)
             cmds.setKeyframe(ik_switch_attr)
-            cmds.setAttr(ik_vis_attr, int(ik_vis_value))
-            cmds.setKeyframe(ik_vis_attr)
-            cmds.setAttr(fk_vis_attr, int(fk_vis_value))
-            cmds.setKeyframe(fk_vis_attr)
-            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot)
+            # cmds.setAttr(ik_vis_attr, int(ik_vis_value))
+            # cmds.setKeyframe(ik_vis_attr)
+            # cmds.setAttr(fk_vis_attr, int(fk_vis_value)) # does not work for some set up like Caroline
+            # cmds.setKeyframe(fk_vis_attr)
+            
+            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint') # new way of getting wrist matrix
+            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space         
+            # cmds.xform(ik_wrist, rotation=wrist_rot) # apply in local space
+
             # the orientation of this one is broken, could it be rotate order? ask Vineet!
             create_transform_keys(objects=[ik_wrist],
                                   tx=True, ty=True, tz=True,
