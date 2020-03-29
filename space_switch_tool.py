@@ -90,6 +90,8 @@ def constrain_move_key(driver, driven, constraintType):
     """Taken from Veronica ikfk matching script, instead of using xform, which
     is behaving inconsistently, use constraint, get the value and apply.
 
+    TODO: figure out why the broken code works on norman rig but not the legit one ;_;
+
     Args:
         driver (str): a parent transform node.
         driven (str): a child transform node.
@@ -98,20 +100,30 @@ def constrain_move_key(driver, driven, constraintType):
     Returns:
         list: a list of nodes that is not None and exists in Maya.
     """
-    # create a hold positio locator at where driver is (avoid cycle error)  
-    loc = cmds.spaceLocator(name="temp")[0]
-    cmds.parent(loc, driver)
-    cmds.setAttr("{}.translate".format(loc), 0, 0, 0)
-    cmds.setAttr("{}.rotate".format(loc), 0, 0, 0)
-    cmds.parent(loc, world=True)
+    # # create a hold positio locator at where driver is (avoid cycle error)  
+    # loc = cmds.spaceLocator(name="temp")[0]
+    # cmds.parent(loc, driver)
+    # cmds.setAttr("{}.translate".format(loc), 0, 0, 0)
+    # cmds.setAttr("{}.rotate".format(loc), 0, 0, 0)
+    # cmds.parent(loc, world=True)
 
-    execStr = ('con = cmds.%s(loc, driven, maintainOffset=False)[0]'
+    # execStr = ('con = cmds.%s(loc, driven, maintainOffset=False)[0]'
+    #            % constraintType)
+    # exec(execStr)
+    # location = cmds.xform(driven, query=True, translation=True,
+    #                       worldSpace=True)
+    # rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
+    # cmds.delete(con, loc)
+    # return location, rotation
+
+    # for some weird reason this broken code work on norman rig while the above does not ;_;
+    execStr = ('con = %s(driver, driven, maintainOffset=False)'
                % constraintType)
     exec(execStr)
     location = cmds.xform(driven, query=True, translation=True,
                           worldSpace=True)
     rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
-    cmds.delete(con, loc)
+    delete(con.name())
     return location, rotation
 
 
@@ -283,7 +295,7 @@ def double_warning(msg, title='warning!'):
     QtWidgets.QMessageBox.warning(None, title, msg)
 
 
-def get_world_matrix(ctl, ws_pos=True, ws_rot=True):
+def get_world_matrix(ctl):
     """Takes one transform node and returns its position and rotation
     in world space.
 
@@ -297,8 +309,8 @@ def get_world_matrix(ctl, ws_pos=True, ws_rot=True):
     # check if ctl exists and is a transform node
     transform = cmds.ls(ctl, type="transform")
     if transform: # TODO: log this
-        pos = cmds.xform(ctl, query=True, translation=True, worldSpace=ws_pos)
-        rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=ws_rot)
+        pos = cmds.xform(ctl, query=True, translation=True, worldSpace=True)
+        rot = cmds.xform(ctl, query=True, rotation=True, worldSpace=True)
     else:
         LOGGER.warning("This is not a transfomr node!")
         pos = None
@@ -307,7 +319,7 @@ def get_world_matrix(ctl, ws_pos=True, ws_rot=True):
     return pos, rot
 
 
-def apply_world_matrix(ctl, pos, rot, ws_pos=True, ws_rot=True):
+def apply_world_matrix(ctl, pos, rot):
     """Takes one transform node and a set of world position and
     rotation, and applies the latter on the former.
 
@@ -319,8 +331,8 @@ def apply_world_matrix(ctl, pos, rot, ws_pos=True, ws_rot=True):
     # check if ctl exists and is a transform node
     transform = cmds.ls(ctl, type="transform")
     if transform:
-        cmds.xform(ctl, translation=pos, worldSpace=ws_pos)
-        cmds.xform(ctl, rotation=rot, worldSpace=ws_rot)
+        cmds.xform(ctl, translation=pos, worldSpace=True)
+        cmds.xform(ctl, rotation=rot, worldSpace=True)
 
 
 def get_maya_window():
