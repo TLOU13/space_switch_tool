@@ -100,31 +100,32 @@ def constrain_move_key(driver, driven, constraintType):
     Returns:
         list: a list of nodes that is not None and exists in Maya.
     """
-    # # create a hold positio locator at where driver is (avoid cycle error)  
-    # loc = cmds.spaceLocator(name="temp")[0]
-    # cmds.parent(loc, driver)
-    # cmds.setAttr("{}.translate".format(loc), 0, 0, 0)
-    # cmds.setAttr("{}.rotate".format(loc), 0, 0, 0)
-    # cmds.parent(loc, world=True)
+    # create a hold positio locator at where driver is (avoid cycle error)  
+    loc = cmds.spaceLocator(name="temp")[0]
+    cmds.parent(loc, driver)
+    cmds.setAttr("{}.translate".format(loc), 0, 0, 0)
+    cmds.setAttr("{}.rotate".format(loc), 0, 0, 0)
+    cmds.parent(loc, world=True)
+    # cmds.delete(cmds.parentConstraint(driver, loc, maintainOffset=False))
 
-    # execStr = ('con = cmds.%s(loc, driven, maintainOffset=False)[0]'
-    #            % constraintType)
-    # exec(execStr)
-    # location = cmds.xform(driven, query=True, translation=True,
-    #                       worldSpace=True)
-    # rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
-    # cmds.delete(con, loc)
-    # return location, rotation
-
-    # for some weird reason this broken code work on norman rig while the above does not ;_;
-    execStr = ('con = %s(driver, driven, maintainOffset=False)'
+    execStr = ('con = cmds.%s(loc, driven, maintainOffset=False)[0]'
                % constraintType)
     exec(execStr)
     location = cmds.xform(driven, query=True, translation=True,
                           worldSpace=True)
     rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
-    delete(con.name())
+    cmds.delete(con, loc)
     return location, rotation
+
+    # # this works in Veronica's script(pyMel), try to replicate it
+    # execStr = ('con = %s(driver, driven, maintainOffset=False)'
+    #            % constraintType)
+    # exec(execStr)
+    # location = cmds.xform(driven, query=True, translation=True,
+    #                       worldSpace=True)
+    # rotation = cmds.xform(driven, query=True, rotation=True, worldSpace=True)
+    # delete(con.name())
+    # return location, rotation
 
 
 def lock_viewport():
@@ -1151,42 +1152,50 @@ class SpaceSwitchTool(QtWidgets.QDialog):
               the set time range.
 
         TODO: too long at the moment, figure out a way to break this method up.
+
+        TODO: for some rigs (max), the wrist flips when doing FK --> IK, and
+              for some weird reason, apply matrix twice fixes it (close enough).
+              best to find out what happen here
+
+        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
+              in the ikfk switch (like Caroline, and max I guess, which has both options),
+              so far we make it work for Caronline, but need to think of a solution for this.
         """
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly
 
-        # test using Norman 
-        self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
-        self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
-        self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
-        self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
-        self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
-        self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
-        self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
-        self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
-        self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
-        self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
-        self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
-        self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
+        # # test using Norman
+        # self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
+        # self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
+        # self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
+        # self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
+        # self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
+        # self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
+        # self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
+        # self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
+        # self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
+        # self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
+        # self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
+        # self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
         
-        # test using Caroline     
-        self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
-        self._ikfk_switch_data_dict["elbow joint"] = "CarolineRig_v4_REF:rig_left_elbow"
-        self._ikfk_switch_data_dict["wrist joint"] = "CarolineRig_v4_REF:rig_left_wrist"
-        self._ikfk_switch_data_dict["ik wrist"] = "CarolineRig_v4_REF:ctl_ik_left_hand"
-        self._ikfk_switch_data_dict["ik elbow"] = "CarolineRig_v4_REF:ctl_ik_left_elbow"
-        self._ikfk_switch_data_dict["fk visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
-        self._ikfk_switch_data_dict["ik visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
-        self._ikfk_switch_data_dict["ik switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
-        self._ikfk_switch_data_dict["fk switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
-        self._ikfk_switch_data_dict["fk shoulder"] = "CarolineRig_v4_REF:ctl_fk_left_shoulder"
-        self._ikfk_switch_data_dict["fk elbow"] = "CarolineRig_v4_REF:ctl_fk_left_elbow"
-        self._ikfk_switch_data_dict["fk wrist"] = "CarolineRig_v4_REF:ctl_fk_left_wrist"
+        # # test using Caroline     
+        # self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
+        # self._ikfk_switch_data_dict["elbow joint"] = "CarolineRig_v4_REF:rig_left_elbow"
+        # self._ikfk_switch_data_dict["wrist joint"] = "CarolineRig_v4_REF:rig_left_wrist"
+        # self._ikfk_switch_data_dict["ik wrist"] = "CarolineRig_v4_REF:ctl_ik_left_hand"
+        # self._ikfk_switch_data_dict["ik elbow"] = "CarolineRig_v4_REF:ctl_ik_left_elbow"
+        # self._ikfk_switch_data_dict["fk visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
+        # self._ikfk_switch_data_dict["ik visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
+        # self._ikfk_switch_data_dict["ik switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
+        # self._ikfk_switch_data_dict["fk switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
+        # self._ikfk_switch_data_dict["fk shoulder"] = "CarolineRig_v4_REF:ctl_fk_left_shoulder"
+        # self._ikfk_switch_data_dict["fk elbow"] = "CarolineRig_v4_REF:ctl_fk_left_elbow"
+        # self._ikfk_switch_data_dict["fk wrist"] = "CarolineRig_v4_REF:ctl_fk_left_wrist"
              
         if not self.validate_ikfk_switch_data():
             double_warning(
                 "Either joints, controls or attributes loaded are invalid!"
-                "Please read the tooltip of each button for instruction."
+                "\nPlease read the tooltip of each button for instruction."
             )
             return
 
@@ -1310,6 +1319,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             # loc3 = cmds.spaceLocator()[0]
             # cmds.setAttr("{}.t".format(loc3), *new_elbow_pos)
             # return
+
+            # new way of getting wrist matrix
+            # for some weird reason the wrist flip, but doing twice get it closer ;_;
+            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint')
             
             # go to previous frame            
             cmds.currentTime(prev_frame, edit=True)
@@ -1331,14 +1344,20 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             # cmds.setAttr(fk_vis_attr, int(fk_vis_value)) # does not work for some set up like Caroline
             # cmds.setKeyframe(fk_vis_attr)
             
-            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint') # new way of getting wrist matrix
+            # the orientation of this one is broken (flip 180), could it be rotate order? ask Vineet!
             apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space         
-            # cmds.xform(ik_wrist, rotation=wrist_rot) # apply in local space
-
-            # the orientation of this one is broken, could it be rotate order? ask Vineet!
+            # cmds.xform(ik_wrist, rotation=wrist_rot) # apply in local space, not working
+            # for some weird reason for norman (max), we need to do the wrist twice (flip it back)
+            # this may not happen to all the rig (worked on Caroline)
+            # get joint position and rotation in world space, again
+            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint')
+            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
             create_transform_keys(objects=[ik_wrist],
                                   tx=True, ty=True, tz=True,
                                   rx=True, ry=True, rz=True)
+            # TODO: need to figure out what happened here :(
+
+            # process elbow
             cmds.xform(ik_elbow, translation=new_elbow_pos, worldSpace=True)
             create_transform_keys(objects=[ik_elbow],
                                   tx=True, ty=True, tz=True)
