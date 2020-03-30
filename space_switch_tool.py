@@ -1198,19 +1198,19 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         TODO: too long at the moment, figure out a way to break this method up.
         """
-        # test using Norman
-        self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
-        self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
-        self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
-        self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
-        self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
-        self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
-        self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
-        self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
-        self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
-        self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
-        self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
-        self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
+        # # test using Norman
+        # self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
+        # self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
+        # self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
+        # self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
+        # self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
+        # self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
+        # self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
+        # self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
+        # self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
+        # self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
+        # self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
+        # self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
         
         # # test using Caroline     
         # self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
