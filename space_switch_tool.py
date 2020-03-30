@@ -919,6 +919,51 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # all user inputs are still valid
         return True
 
+    def _check_fk_rotate_order(self, shoulder_jnt, elbow_jnt, wrist_jnt,
+                               fk_shoulder, fk_elbow, fk_wrist):
+        """Check the consistency between fk controls and joints, give it a
+        warning if a mismatch is found.
+
+        TODO: maybe integrate this with more clarity
+    
+        Args:
+            shoulder_jnt (str): shoulder joint from internal data.
+            elbow_jnt (str): elbow joint from internal data.
+            wrist_jnt (str): wrist joint from internal data.
+            fk_shoulder (str): fk shoulder control from internal data.
+            fk_elbow (str): fk elbow control from internal data.
+            fk_wrist (str): fk wrist control from internal data.            
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+
+        # HOW TO FIX IT!
+        # zero out control first, return both ik and fk to the same position
+        # change rotate order on fk controls (same as joints)
+        # reposition the control (ik)
+        # run tool
+
+        rotate_order_flag = False
+        msg = ("The following joints and FK controls do not "
+               "share the same rotate order:\n\n")
+        for jnt, ctl in [[shoulder_jnt, fk_shoulder], [elbow_jnt, fk_elbow],
+                         [wrist_jnt, fk_wrist]]:
+            if check_rotate_order(jnt, ctl) is False:
+                msg += "{}, {}\n".format(jnt, ctl)
+                rotate_order_flag = True
+
+        if rotate_order_flag:
+            msg += "\nThe switch result may be incorrect, continue?"
+            buttons = (QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            result = QtWidgets.QMessageBox.warning(None,
+                                                   'Inconsistency Warning!',
+                                                   msg, buttons)
+            if result == QtWidgets.QMessageBox.No:
+                return False # forfeit operation (fix rotate order first)
+
+        return True # still execute operation
+
     def execute_switch(self):
         """Run the switch operation based on the tab loaded, either
         space switch or ik/fk switch.
@@ -961,8 +1006,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
             if self._currentFrame_radbtn.isChecked():
                 self.set_space_switch(current_frame, ctl,
-                                    source_space, source_value,
-                                    target_space, target_value,)
+                                      source_space, source_value,
+                                      target_space, target_value,)
             else:
                 range_start = int(self._start_frame_field.text())
                 range_end = int(self._end_frame_field.text())
@@ -1137,7 +1182,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         create_transform_keys(objects=[ctl], tx=True, ty=True,
                               tz=True, rx=True, ry=True, rz=True)
 
-        # return to current frame and apply original matrix
+        # return to given frame and apply original matrix
         cmds.currentTime(frame, edit=True)
         cmds.setAttr(target_space, target_value)
         cmds.setKeyframe(target_space)
@@ -1146,37 +1191,26 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                               rx=True, ry=True, rz=True)
 
     def ikfk_switch(self):
-        """Executes the main ik/fk switch operation using internal data.
+        """Decides which ikfk operation to wrong based on user settings.
 
         TODO: check what happen if user have other space switch in between
               the set time range.
 
         TODO: too long at the moment, figure out a way to break this method up.
-
-        TODO: for some rigs (max), the wrist flips when doing FK --> IK, and
-              for some weird reason, apply matrix twice fixes it (close enough).
-              best to find out what happen here
-
-        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
-              in the ikfk switch (like Caroline, and max I guess, which has both options),
-              so far we make it work for Caronline, but need to think of a solution for this.
         """
-        # check internal data to make sure user did not remove or rename stuffs
-        # from the scene randomly
-
-        # # test using Norman
-        # self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
-        # self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
-        # self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
-        # self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
-        # self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
-        # self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
-        # self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
-        # self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
-        # self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
-        # self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
-        # self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
-        # self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
+        # test using Norman
+        self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
+        self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
+        self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
+        self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
+        self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
+        self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
+        self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
+        self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
+        self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
+        self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
+        self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
+        self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
         
         # # test using Caroline     
         # self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
@@ -1191,7 +1225,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # self._ikfk_switch_data_dict["fk shoulder"] = "CarolineRig_v4_REF:ctl_fk_left_shoulder"
         # self._ikfk_switch_data_dict["fk elbow"] = "CarolineRig_v4_REF:ctl_fk_left_elbow"
         # self._ikfk_switch_data_dict["fk wrist"] = "CarolineRig_v4_REF:ctl_fk_left_wrist"
-             
+
+        # check internal data to make sure user did not remove or rename stuffs
+        # from the scene randomly 
         if not self.validate_ikfk_switch_data():
             double_warning(
                 "Either joints, controls or attributes loaded are invalid!"
@@ -1199,6 +1235,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             )
             return
 
+        # TODO: any vis attr should be extra since some rigs already include that in the switch attr
         current_frame = cmds.currentTime(query=True)
         prev_frame = current_frame - 1.0
         shoulder_jnt = self._ikfk_switch_data_dict["shoulder joint"]
@@ -1218,53 +1255,304 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         ik_vis_attr = self._ikfk_switch_data_dict["ik visibility"][0]
         ik_vis_value = self._ikfk_switch_data_dict["ik visibility"][1]
 
-        # TODO: maybe integrate this with more clarity
-        # check rotate order, give it a warning if something is wrong
-        rotate_order_flag = False
-        msg = ("The following joints and FK controls do not "
-               "share the same rotate order:\n\n")
-        for jnt, ctl in [[shoulder_jnt, fk_shoulder], [elbow_jnt, fk_elbow],
-                         [wrist_jnt, fk_wrist]]:
-            if check_rotate_order(jnt, ctl) is False:
-                msg += "{}, {}\n".format(jnt, ctl)
-                rotate_order_flag = True
-
-        if rotate_order_flag:
-            msg += "\nThe switch result may be incorrect, continue?"
-            buttons = (QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-            result = QtWidgets.QMessageBox.warning(None,
-                                                   'Inconsistency Warning!',
-                                                   msg, buttons)
-            if result == QtWidgets.QMessageBox.No:
+        # get the flag: True --> ikfk, False --> fkik
+        flag = self._ik_to_fk_radbtn.isChecked()
+        if flag: # ikfk
+            # check rotate order of the fk controls
+            response = self._check_fk_rotate_order(shoulder_jnt, elbow_jnt,
+                                                   wrist_jnt, fk_shoulder,
+                                                   fk_elbow, fk_wrist)
+            if response is False:
+                # forfeit operation (fix rotate order first)
                 return
+            ctls = [fk_shoulder, fk_elbow, fk_wrist]
 
-        # HOW TO FIX IT!
-        # zero out control first, return both ik and fk to the same position
-        # change rotate order on fk controls (same as joints)
-        # reposition the control (ik)
-        # run tool
+        else: # fkik
+            ctls = [ik_elbow, ik_wrist]
 
+        # get_ik_to_fk_switch(shoulder_jnt, elbow_jnt, wrist_jnt)
+        # set_ik_to_fk_switch(fk_shoulder, fk_elbow, fk_wrist,
+        #                     should_rot, elbow_rot, wrist_rot, fk_switch_attr,
+        #                     fk_switch_value, fk_vis_attr, fk_vis_value,
+        #                     ik_vis_attr, ik_vis_value, frame, prev_frame=None)
+
+        # get_fk_to_ik_switch(shoulder_jnt, elbow_jnt, wrist_jnt,
+        #                     ik_wrist)
+
+        # set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos, wrist_rot,
+        #                     elbow_pos, ik_switch_attr, ik_switch_value,
+        #                     fk_vis_attr, fk_vis_value, ik_vis_attr,
+        #                     ik_vis_value, frame, prev_frame=None)
+
+        # cmds.undoInfo(openChunk=True)
+        # lock_viewport()
+        # # huge try block is used here to take care of undo chunk
+        # # TODO: replace it using decorator
+        # try: 
+        if self._currentFrame_radbtn.isChecked():
+            # doing one frame switch operation
+            self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt, wrist_jnt,
+                                 fk_shoulder, fk_elbow, fk_wrist,
+                                 fk_switch_attr, fk_switch_value,
+                                 fk_vis_attr, fk_vis_value, ik_vis_attr,
+                                 ik_vis_value, ik_switch_attr,
+                                 ik_switch_value, ik_wrist, ik_elbow,
+                                 current_frame, prev_frame)
+
+        else:
+            range_start = int(self._start_frame_field.text())
+            range_end = int(self._end_frame_field.text())
+            keyframes = cmds.keyframe(ctls, query=True, timeChange=True)
+            if keyframes is None:
+                keyframes = [] # set to empty list instead
+            keyframes = list(set(keyframes)) # rid of duplicates
+            keyframes.sort()
+
+            if self._bakeKeyframes_radbtn.isChecked(): # bake at keyframes
+                ref_keys = keyframes[:] # save if for reference
+                if self._set_time_range_chkbx.isChecked():
+                    # only get the keys within set range
+                    new_keys = []
+                    for k in keyframes:
+                        if range_start <= k <= range_end:
+                            new_keys.append(k)
+                    keyframes = new_keys
+
+                if not keyframes:
+                    double_warning("no keys to bake!")
+                    # raise Exception # escape the block
+                    return
+
+                # gathering data
+                matrixData = []
+                for key in keyframes:
+                    cmds.currentTime(key, edit=True)
+                    # cmds.setAttr(source_space, source_value)
+                    # cmds.setKeyframe(source_space)
+                    data = self.get_ikfk_data(flag, shoulder_jnt,
+                                              elbow_jnt, wrist_jnt,
+                                              ik_wrist)
+                    matrixData.append(data)
+
+                # check if closing swap will run, if so, go reverse direction
+                if len(keyframes) > 1 and keyframes[-1] < ref_keys[-1]:
+                    cmds.currentTime(keyframes[-1], edit=True)
+                    end_data = self.get_ikfk_data(not flag, shoulder_jnt,
+                                                  elbow_jnt, wrist_jnt,
+                                                  ik_wrist)
+                    
+                    # this may or may not be key so we have to be sure
+                    # go to previous frame of the closing switch
+                    # and save data
+                    cmds.currentTime(keyframes[-1] - 1, edit=True)
+                    prev_data = self.get_ikfk_data(flag, shoulder_jnt,
+                                                   elbow_jnt, wrist_jnt,
+                                                   ik_wrist)
+
+                # start the operation
+                if keyframes[0] > ref_keys[0]:
+                    # self.set_space_switch(keyframes[0], ctl,
+                    #                       source_space, source_value,
+                    #                       target_space, target_value,)
+
+                    self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
+                                         wrist_jnt, fk_shoulder, fk_elbow,
+                                         fk_wrist, fk_switch_attr,
+                                         fk_switch_value, fk_vis_attr,
+                                         fk_vis_value, ik_vis_attr,
+                                         ik_vis_value, ik_switch_attr,
+                                         ik_switch_value, ik_wrist,
+                                         ik_elbow, keyframes[0],
+                                         keyframes[0] - 1)
+
+                    # remove first keyframe from data
+                    keyframes = keyframes[1:]
+                    matrixData = matrixData[1:]
+
+                # make sure keyframes is not emptied from the first check
+                if keyframes and keyframes[-1] < ref_keys[-1]:
+                    # flip target and source to close chunk
+                    # cannot use set_space_switch method since
+                    # current matrix has already been changed so restore them
+                    if flag: # ikfk
+                        frame = keyframes[-1] # last frame
+                        wrist_pos, wrist_rot, elbow_pos = end_data
+                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                            wrist_rot, elbow_pos,
+                                            ik_switch_attr,
+                                            ik_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, frame)
+
+                        should_rot, elbow_rot, wrist_rot = prev_data
+                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                            fk_wrist, should_rot,
+                                            elbow_rot, wrist_rot,
+                                            fk_switch_attr,
+                                            fk_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, frame)                        
+
+                    else: # fkik
+                        frame = keyframes[-1] - 1
+                        should_rot, elbow_rot, wrist_rot = end_data
+                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                            fk_wrist, should_rot,
+                                            elbow_rot, wrist_rot,
+                                            fk_switch_attr,
+                                            fk_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, frame)
+
+                        wrist_pos, wrist_rot, elbow_pos = end_data
+                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                            wrist_rot, elbow_pos,
+                                            ik_switch_attr,
+                                            ik_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, frame)
+
+                    # remove last keyframe from data
+                    keyframes = keyframes[:-1]
+                    matrixData = matrixData[:-1]
+
+                # anything right on top or outside will run regularly
+                # anything on the insde will make a set_space_switch
+                # inside or outside refers to the outermost two keys
+                for i, key in enumerate(keyframes):
+                    if flag: # ikfk
+                        should_rot, elbow_rot, wrist_rot = matrixData[i]
+                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                            fk_wrist, should_rot,
+                                            elbow_rot, wrist_rot,
+                                            fk_switch_attr,
+                                            fk_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, key)                        
+
+                    else: # fkik
+                        wrist_pos, wrist_rot, elbow_pos = matrixData[i]
+                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                            wrist_rot, elbow_pos,
+                                            ik_switch_attr,
+                                            ik_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, key)
+
+            # section for 'bake every frame'
+            # TODO: check situations when keyframes is [] or 1-2 items
+            else: # self._everyFrame_radbtn_radbtn.isChecked()
+                if not self._set_time_range_chkbx.isChecked():
+                    range_start, range_end, frame_range = (
+                        get_timeline_range()
+                    )
+                time_range = range(int(range_start),
+                                   int(range_end) + 1)
+
+                # time_range size will always be 2 or more so skip checking
+                # gathering data
+                matrixData = []
+                for key in keyframes:
+                    cmds.currentTime(key, edit=True)
+                    # cmds.setAttr(source_space, source_value)
+                    # cmds.setKeyframe(source_space)
+                    data = self.get_ikfk_data(flag, shoulder_jnt,
+                                              elbow_jnt, wrist_jnt,
+                                              ik_wrist)
+                    matrixData.append(data)
+
+                if keyframes[0] < time_range[0]:
+                    # self.set_space_switch(time_range[0], ctl,
+                    #                       source_space, source_value,
+                    #                       target_space, target_value,)
+                    self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
+                                         wrist_jnt, fk_shoulder, fk_elbow,
+                                         fk_wrist, fk_switch_attr,
+                                         fk_switch_value, fk_vis_attr,
+                                         fk_vis_value, ik_vis_attr,
+                                         ik_vis_value, ik_switch_attr,
+                                         ik_switch_value, ik_wrist,
+                                         ik_elbow, time_range[0],
+                                         time_range[0] - 1)
+                    time_range = time_range[1:]
+                    matrixData = matrixData[1:]
+
+                if keyframes[-1] > time_range[-1]:
+                    # self.set_space_switch(time_range[-1], ctl,
+                    #                       target_space, target_value,
+                    #                       source_space, source_value,)
+                    self.set_ikfk_switch(not flag, shoulder_jnt, elbow_jnt,
+                                         wrist_jnt, fk_shoulder, fk_elbow,
+                                         fk_wrist, fk_switch_attr,
+                                         fk_switch_value, fk_vis_attr,
+                                         fk_vis_value, ik_vis_attr,
+                                         ik_vis_value, ik_switch_attr,
+                                         ik_switch_value, ik_wrist,
+                                         ik_elbow, time_range[-1],
+                                         time_range[-1] - 1)                    
+                    time_range = time_range[:-1]
+                    matrixData = matrixData[:-1]
+
+                for i, key in enumerate(time_range):
+                    if flag: # ikfk
+                        should_rot, elbow_rot, wrist_rot = matrixData[i]
+                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                            fk_wrist, should_rot,
+                                            elbow_rot, wrist_rot,
+                                            fk_switch_attr,
+                                            fk_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, key)                        
+
+                    else: # fkik
+                        wrist_pos, wrist_rot, elbow_pos = matrixData[i]
+                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                            wrist_rot, elbow_pos,
+                                            ik_switch_attr,
+                                            ik_switch_value, fk_vis_attr,
+                                            fk_vis_value, ik_vis_attr,
+                                            ik_vis_value, key)
+
+            # return to current frame
+            cmds.currentTime(current_frame, edit=True)
+
+        # except Exception, e:
+        #     double_warning(
+        #         "There is an Error in try block!\n{}".format(str(e))
+        #     )
+
+        # finally: # clean up
+        #     unlock_viewport()
+        #     cmds.undoInfo(closeChunk=True)
+
+
+
+    def get_ik_to_fk_switch(self, shoulder_jnt, elbow_jnt, wrist_jnt):
+        """Executes the main ik --> fk switch operation using internal data.
+
+        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
+              in the ikfk switch (like Caroline, and max I guess, which has both options),
+              so far we make it work for Caronline, but need to think of a solution for this.
+        """
         # get joint position and rotation in world space
         shoulder_pos, should_rot = get_world_matrix(shoulder_jnt)
         elbow_pos, elbow_rot = get_world_matrix(elbow_jnt)
         wrist_pos, wrist_rot = get_world_matrix(wrist_jnt)
 
-        # get joint position and rotation
-        # shoulder_pos, should_rot = get_world_matrix(shoulder_jnt, ws_rot=False)
-        # elbow_pos, elbow_rot = get_world_matrix(elbow_jnt, ws_rot=False)
-        # wrist_pos, wrist_rot = get_world_matrix(wrist_jnt, ws_rot=False)
+        return should_rot, elbow_rot, wrist_rot # position not needed for FK
 
-        if self._ik_to_fk_radbtn.isChecked():
-            
-            # should_rot = cmds.xform(shoulder_jnt, query=True, rotation=True)
-            # elbow_rot = cmds.xform(elbow_jnt, query=True, rotation=True)
-            # wrist_rot = cmds.xform(wrist_jnt, query=True, rotation=True)
+    def set_ik_to_fk_switch(self, fk_shoulder, fk_elbow, fk_wrist,
+                            should_rot, elbow_rot, wrist_rot, fk_switch_attr,
+                            fk_switch_value, fk_vis_attr, fk_vis_value,
+                            ik_vis_attr, ik_vis_value, frame, prev_frame=None):
+        """Executes the main ik --> fk switch operation using internal data.
 
-            # should_rot = cmds.getAttr("{}.rotate".format(shoulder_jnt))[0]
-            # elbow_rot = cmds.getAttr("{}.rotate".format(elbow_jnt))[0]
-            # wrist_rot = cmds.getAttr("{}.rotate".format(wrist_jnt))[0]
-
-            # go to previous frame            
+        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
+              in the ikfk switch (like Caroline, and max I guess, which has both options),
+              so far we make it work for Caronline, but need to think of a solution for this.
+        """
+        if prev_frame:
+            # go to previous frame and hold down the value        
             cmds.currentTime(prev_frame, edit=True)
             for fk in [fk_shoulder, fk_elbow, fk_wrist]:
                 # hold down previous position     
@@ -1273,58 +1561,93 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             cmds.setKeyframe(fk_vis_attr)
             cmds.setKeyframe(ik_vis_attr)
 
-            # return to current frame
-            cmds.currentTime(current_frame, edit=True)
-            cmds.setAttr(fk_switch_attr, fk_switch_value)
-            cmds.setKeyframe(fk_switch_attr)
-            # cmds.setAttr(fk_vis_attr, int(fk_vis_value))
-            # cmds.setKeyframe(fk_vis_attr)
-            # cmds.setAttr(ik_vis_attr, int(ik_vis_value)) # does not work for some set up like Caroline
-            # cmds.setKeyframe(ik_vis_attr)
+        # return to given frame
+        cmds.currentTime(frame, edit=True)
+        cmds.setAttr(fk_switch_attr, fk_switch_value)
+        cmds.setKeyframe(fk_switch_attr)
+        # cmds.setAttr(fk_vis_attr, int(fk_vis_value))
+        # cmds.setKeyframe(fk_vis_attr)
+        # cmds.setAttr(ik_vis_attr, int(ik_vis_value)) # does not work for some set up like Caroline
+        # cmds.setKeyframe(ik_vis_attr)
 
-            # why does this work but not mine
-                       
-            # cmds.xform(fk_shoulder, rotation=should_rot)     
-            # cmds.xform(fk_elbow, rotation=elbow_rot)    
-            # cmds.xform(fk_wrist, rotation=wrist_rot)
-            # cmds.setAttr("{}.rotate".format(fk_shoulder), *should_rot)
-            # cmds.setAttr("{}.rotateY".format(fk_elbow), elbow_rot[1])
-            # cmds.setAttr("{}.rotate".format(fk_wrist), *wrist_rot)
-            # create_transform_keys(objects=[fk_shoulder, fk_elbow, fk_wrist],
-            #                       rx=True, ry=True, rz=True)
+        for fk, value in [[fk_shoulder, should_rot], [fk_elbow, elbow_rot],
+                          [fk_wrist, wrist_rot]]:
+            # apply in world space
+            cmds.xform(fk, rotation=value, worldSpace=True)
+            create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
 
-            for fk, value in [[fk_shoulder, should_rot], [fk_elbow, elbow_rot],
-                              [fk_wrist, wrist_rot]]:
-                cmds.xform(fk, rotation=value, worldSpace=True) # apply in world space
-                # cmds.xform(fk, rotation=value) # apply in local space
-                # print value
-                # cmds.setAttr("{}.rotate".format(fk), *value)
-                create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
 
-        else: # self._fk_to_ik_radbtn.isChecked()
-            # vector math
-            shoulder_jnt_vector = om.MVector(shoulder_pos)
-            elbow_jnt_vector = om.MVector(elbow_pos)
-            wrist_jnt_vector = om.MVector(wrist_pos)
-            midpoint_vector = ((wrist_jnt_vector - shoulder_jnt_vector) * 0.5
-                               + shoulder_jnt_vector)
-            aim_vector = ((elbow_jnt_vector - midpoint_vector) * 4
-                          + midpoint_vector)
-            new_elbow_pos = (aim_vector.x, aim_vector.y, aim_vector.z)
-            
-            # loc1 = cmds.spaceLocator()[0]
-            # cmds.setAttr("{}.t".format(loc1), *elbow_pos)
-            # loc2 = cmds.spaceLocator()[0]
-            # cmds.setAttr("{}.t".format(loc2), midpoint_vector.x, midpoint_vector.y, midpoint_vector.z)
-            # loc3 = cmds.spaceLocator()[0]
-            # cmds.setAttr("{}.t".format(loc3), *new_elbow_pos)
-            # return
 
-            # new way of getting wrist matrix
-            # for some weird reason the wrist flip, but doing twice get it closer ;_;
-            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint')
-            
-            # go to previous frame            
+
+
+
+    def get_fk_to_ik_switch(self, shoulder_jnt, elbow_jnt, wrist_jnt,
+                            ik_wrist):
+        """Executes the main fk --> ik switch operation using internal data.
+
+        TODO: for some rigs (max), the wrist flips when doing FK --> IK, and
+              for some weird reason, apply matrix twice fixes it (close enough).
+              best to find out what happen here
+
+        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
+              in the ikfk switch (like Caroline, and max I guess, which has both options),
+              so far we make it work for Caronline, but need to think of a solution for this.
+        """
+        # get joint position and rotation in world space
+        orig_shoulder_pos, orig_should_rot = get_world_matrix(shoulder_jnt)
+        orig_elbow_pos, orig_elbow_rot = get_world_matrix(elbow_jnt)
+        orig_wrist_pos, orig_wrist_rot = get_world_matrix(wrist_jnt)
+
+        # new way of getting wrist matrix (use constraint over xform)
+        # for some weird reason the wrist flip (for rig Max)
+        # but executing twice get it closer somehow (flip it back?)
+        # this may not happen to all the rig (worked just fine on Caroline)
+        # the wrist_pos should remain unchanged (verify??)
+        wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
+                                                  'parentConstraint')       
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space        
+        # get joint position and rotation in world space, again
+        wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
+                                                  'parentConstraint')
+        # TODO: find out why. Could it be rotate order?
+
+        # restore original matrix
+        apply_world_matrix(ik_wrist, orig_wrist_pos, orig_wrist_rot)
+
+        # vector math
+        shoulder_jnt_vector = om.MVector(orig_shoulder_pos)
+        elbow_jnt_vector = om.MVector(orig_elbow_pos)
+        wrist_jnt_vector = om.MVector(orig_wrist_pos)
+        midpoint_vector = ((wrist_jnt_vector - shoulder_jnt_vector) * 0.5
+                           + shoulder_jnt_vector)
+        aim_vector = ((elbow_jnt_vector - midpoint_vector) * 4
+                      + midpoint_vector)
+        new_elbow_pos = (aim_vector.x, aim_vector.y, aim_vector.z)
+
+        return wrist_pos, wrist_rot, new_elbow_pos
+
+
+        
+
+
+
+
+    def set_fk_to_ik_switch(self, ik_wrist, ik_elbow, wrist_pos, wrist_rot,
+                            elbow_pos, ik_switch_attr, ik_switch_value,
+                            fk_vis_attr, fk_vis_value, ik_vis_attr,
+                            ik_vis_value, frame, prev_frame=None):
+        """Executes the main fk --> ik switch operation using internal data.
+
+        TODO: for some rigs (max), the wrist flips when doing FK --> IK, and
+              for some weird reason, apply matrix twice fixes it (close enough).
+              best to find out what happen here
+
+        TODO: some rigs have separate visibility control (like FS rigs), some incorporate
+              in the ikfk switch (like Caroline, and max I guess, which has both options),
+              so far we make it work for Caronline, but need to think of a solution for this.
+        """
+        if prev_frame:        
+            # go to previous frame and hold down the value           
             cmds.currentTime(prev_frame, edit=True)
             create_transform_keys(objects=[ik_wrist],
                                   tx=True, ty=True, tz=True,
@@ -1335,35 +1658,85 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             cmds.setKeyframe(ik_vis_attr)
             cmds.setKeyframe(fk_vis_attr)
 
-            # return to current frame
-            cmds.currentTime(current_frame, edit=True)
-            cmds.setAttr(ik_switch_attr, ik_switch_value)
-            cmds.setKeyframe(ik_switch_attr)
-            # cmds.setAttr(ik_vis_attr, int(ik_vis_value))
-            # cmds.setKeyframe(ik_vis_attr)
-            # cmds.setAttr(fk_vis_attr, int(fk_vis_value)) # does not work for some set up like Caroline
-            # cmds.setKeyframe(fk_vis_attr)
-            
-            # the orientation of this one is broken (flip 180), could it be rotate order? ask Vineet!
-            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space         
-            # cmds.xform(ik_wrist, rotation=wrist_rot) # apply in local space, not working
-            # for some weird reason for norman (max), we need to do the wrist twice (flip it back)
-            # this may not happen to all the rig (worked on Caroline)
-            # get joint position and rotation in world space, again
-            wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist, 'parentConstraint')
-            apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
-            create_transform_keys(objects=[ik_wrist],
-                                  tx=True, ty=True, tz=True,
-                                  rx=True, ry=True, rz=True)
-            # TODO: need to figure out what happened here :(
+        # return to given frame
+        cmds.currentTime(frame, edit=True)
+        cmds.setAttr(ik_switch_attr, ik_switch_value)
+        cmds.setKeyframe(ik_switch_attr)
+        # cmds.setAttr(ik_vis_attr, int(ik_vis_value))
+        # cmds.setKeyframe(ik_vis_attr)
+        # cmds.setAttr(fk_vis_attr, int(fk_vis_value)) # does not work for some set up like Caroline
+        # cmds.setKeyframe(fk_vis_attr)
+        
+        # process wrist
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space         
+        create_transform_keys(objects=[ik_wrist],
+                              tx=True, ty=True, tz=True,
+                              rx=True, ry=True, rz=True)
 
-            # process elbow
-            cmds.xform(ik_elbow, translation=new_elbow_pos, worldSpace=True)
-            create_transform_keys(objects=[ik_elbow],
-                                  tx=True, ty=True, tz=True)
+        # process elbow
+        cmds.xform(ik_elbow, translation=elbow_pos, worldSpace=True)
+        create_transform_keys(objects=[ik_elbow],
+                              tx=True, ty=True, tz=True)
+
+    def get_ikfk_data(self, flag, shoulder_jnt, elbow_jnt, wrist_jnt, ik_wrist):
+        """Decides which ikfk operation to wrong based on user settings.
+
+        TODO: check what happen if user have other space switch in between
+              the set time range.
+
+        TODO: too long at the moment, figure out a way to break this method up.
+        """
+        if flag: # ikfk
+            should_rot, elbow_rot, wrist_rot = (
+                self.get_ik_to_fk_switch(shoulder_jnt, elbow_jnt,
+                                         wrist_jnt)
+            )
+            return should_rot, elbow_rot, wrist_rot
+        
+        else: # fkik
+            wrist_pos, wrist_rot, elbow_pos = (
+                self.get_fk_to_ik_switch(shoulder_jnt, elbow_jnt,
+                                         wrist_jnt, ik_wrist)
+            )
+            return wrist_pos, wrist_rot, elbow_pos
+
+    def set_ikfk_switch(self, flag, shoulder_jnt, elbow_jnt, wrist_jnt,
+                        fk_shoulder, fk_elbow, fk_wrist, fk_switch_attr,
+                        fk_switch_value, fk_vis_attr, fk_vis_value,
+                        ik_vis_attr, ik_vis_value, ik_switch_attr,
+                        ik_switch_value, ik_wrist, ik_elbow, frame,
+                        prev_frame):
+        """Decides which ikfk operation to wrong based on user settings.
+
+        TODO: check what happen if user have other space switch in between
+              the set time range.
+
+        TODO: too long at the moment, figure out a way to break this method up.
+        """
+        if flag: # ikfk
+            should_rot, elbow_rot, wrist_rot = self.get_ik_to_fk_switch(
+                shoulder_jnt, elbow_jnt, wrist_jnt
+            )
+            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow, fk_wrist,
+                                     should_rot, elbow_rot, wrist_rot,
+                                     fk_switch_attr, fk_switch_value,
+                                     fk_vis_attr, fk_vis_value, ik_vis_attr,
+                                     ik_vis_value, frame, prev_frame)
+        else: # fkik
+            wrist_pos, wrist_rot, elbow_pos = self.get_fk_to_ik_switch(
+                shoulder_jnt, elbow_jnt, wrist_jnt, ik_wrist
+            )
+            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos, wrist_rot,
+                                     elbow_pos, ik_switch_attr,
+                                     ik_switch_value, fk_vis_attr,
+                                     fk_vis_value, ik_vis_attr, ik_vis_value,
+                                     frame, prev_frame)
 
     def mouseReleaseEvent(self, event):
         """Makes sure when user clicks on the UI it will set UI in focus.
+
+        TODO: there should be a better way to implement this, like re-define
+              the way QLineEdit behave.
         """
         super(SpaceSwitchTool, self).mouseReleaseEvent(event)
         self.setFocus()
