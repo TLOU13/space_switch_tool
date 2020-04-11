@@ -6,6 +6,8 @@ CLASSES:
     CustomIntValidator: class to reimplement the QIntValidator.
 """
 import os
+import json
+import ntpath
 import logging
 from functools import partial
 
@@ -20,12 +22,26 @@ from PySide2 import QtWidgets, QtGui, QtCore
 LOGGER = logging.getLogger(__name__)
 
 
+def path_leaf(path):
+    """Takes a full path name and returns a single file name. Cannot use
+    os.path.basename since it does not work with Unix based os.
+
+    Args:
+        path (str): full file path.
+
+    Returns:
+        str: file name.
+    """
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
+
+
 def to_list(nodes):
-    """check the input, if gets a single node, put it in a list, pass if gets
+    """Checks the input, if gets a single node, put it in a list, pass if gets
     a list, and returns None if not a string or list.
 
     Args:
-        nodes (str|list): one or multiple nodes
+        nodes (str|list): one or multiple nodes.
 
     Returns:
         list: a list of nodes.
@@ -42,19 +58,23 @@ def to_list(nodes):
 
 
 def get_current_folder(subFolder=""):
-    """get the current file's folder with option of creating a subfolder,
+    """Gets the current file's folder with option of creating a subfolder,
     if current file is not saved, return empty string.
 
+    TODO: test this on Unix to see if "/" causes problem.
+
     Args:
-        subFolder (str): name of the subfolder to create
+        subFolder (str): name of the subfolder to create.
 
     Returns:
         str: directory path of the current folder or subfolder.    
     """
     currentDir = cmds.file(query=True, sceneName=True)
     if currentDir:
-        backupDir = currentDir.replace("%s" % cmds.file(query=True,
-                                       sceneName=True, shortName=True),
+        if subFolder:
+            subFolder = "/{}".format(subFolder) # add separator
+        backupDir = currentDir.replace("/{}".format(cmds.file(query=True,
+                                       sceneName=True, shortName=True)),
                                        subFolder)
         if not os.path.isdir(backupDir):
             os.mkdir(backupDir)
@@ -63,12 +83,12 @@ def get_current_folder(subFolder=""):
 
 
 def check_node_type(nodes, checkTypes=["transform"]):
-    """check the node types of a list of nodes, return True if they all
+    """Checks the node types of a list of nodes, return True if they all
     match the given type, False if not.
 
     Args:
-        nodes (str|list): one or multiple nodes
-        checkTypes (str|list): any node type in Maya
+        nodes (str|list): one or multiple nodes.
+        checkTypes (str|list): any node type in Maya.
 
     Returns:
         bool: True if successful, False otherwise.
@@ -87,7 +107,7 @@ def check_node_type(nodes, checkTypes=["transform"]):
 
 
 def check_rotate_order(source, target):
-    """query the rotate orders of source and target and check if they are
+    """Queries the rotate orders of source and target and check if they are
     identical, raise warning if not.
 
     Args:
@@ -109,7 +129,7 @@ def check_rotate_order(source, target):
 
 
 def constrain_move_key(driver, driven, constraintType):
-    """Taken from Veronica ikfk matching script, instead of using xform, which
+    """Taken from Veronica's ikfk matching script, instead of using xform, which
     is behaving inconsistently, use constraint, get the value and apply.
 
     TODO: figure out why the broken code works on norman rig but not the legit one ;_;
@@ -306,7 +326,7 @@ def channel_box_selection():
     return channels_sel
 
 
-def double_warning(msg, title='warning!'):
+def double_warning(msg, title='Warning!'):
     """Takes a string and gives a QMessageBox warning plus a logging message
     from that string.
 
@@ -432,10 +452,14 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             SpaceSwitchTool.folder_path_str = get_current_folder()
 
         # declare and initialize variable
-        self._space_switch_data_dict = {"target control":"",
+        self._selected_item = None
+        self._file_list_items = {}
+        self._space_switch_data_dict = {"mode":"space switch",
+                                        "target control":"",
                                         "source space":[],
                                         "target space":[]}
-        self._ikfk_switch_data_dict = {"shoulder joint":"",
+        self._ikfk_switch_data_dict = {"mode":"ikfk switch",
+                                       "shoulder joint":"",
                                        "elbow joint":"",
                                        "wrist joint":"",
                                        "fk shoulder":"",
@@ -470,7 +494,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             SpaceSwitchTool.folder_path_str
         )
         self._load_path_btn = QtWidgets.QPushButton()
-        self._file_list = QtWidgets.QListWidget()
+        self._file_list_widget = QtWidgets.QListWidget()
         self._tutorial_lbl = QtWidgets.QLabel(self._tutorial_txt)
 
         # build space switch widgets
@@ -529,6 +553,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._set_widgets()
         self._set_layouts()
         self._connect_signals()
+        self.populate_list_widget(give_warning=False)
 
     def _set_widgets(self):
         '''Sets all parameters for the widgets.
@@ -695,7 +720,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # organize main switch tab layouts
         main_switch_folder_lyt.addWidget(self._folder_path_field)
         main_switch_folder_lyt.addWidget(self._load_path_btn)
-        main_switch_list_lyt.addWidget(self._file_list)
+        main_switch_list_lyt.addWidget(self._file_list_widget)
         main_switch_list_lyt.addWidget(self._tutorial_lbl)
 
         # organize space switch tab layouts
@@ -757,6 +782,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # connect main switch buttons
         self._folder_path_field.editingFinished.connect(self._folder_path_changed)
         self._load_path_btn.clicked.connect(self.get_folder_path)
+        self._file_list_widget.itemClicked.connect(self._list_item_selected)
 
         # connect space switch buttons
         self._load_source_btn.clicked.connect(partial(self.load_attr_value,
@@ -847,46 +873,143 @@ class SpaceSwitchTool(QtWidgets.QDialog):
     def _folder_path_changed(self):
         """Validate the new folder path, and load all the switch data indside
         if folder is valid.
+
+        TODO: when Return is pressed, editingFinished is triggered twice,
+              from both Return AND escaping focus. Super annoying!
         """
         folder_name = self._folder_path_field.text()
         if os.path.isdir(folder_name):
-            # search load all the json files in the folder
             SpaceSwitchTool.folder_path_str = folder_name
         else:
             self._folder_path_field.setText(SpaceSwitchTool.folder_path_str)
 
+        self.populate_list_widget()
         self.setFocus()
+
+    def _list_item_selected(self):
+        """Detects when a list item is selected and updates the internal data
+        and UI, or deselect when a selected item was clicked.
+        """
+        item = self._file_list_widget.currentItem()
+        name = item.text()
+        if item is self._selected_item:
+            self._file_list_widget.setItemSelected(item, False) # deselect
+            self._selected_item = None
+            # leave the data_dict be, no need to empty it when deselect
+        else:
+            data = self._file_list_items[name]
+            if data["mode"] == "space switch":
+                self._space_switch_data_dict = data.copy()
+                self._populate_space_switch_UI()
+            else: # data["mode"] == "ikfk switch"
+                self._ikfk_switch_data_dict = data.copy()
+                self._populate_ikfk_switch_UI()
+            self._selected_item = item
+
+    def _add_item(self, name, data):
+        """Internal method that adds the imported data into list widget. This
+        method is not responsible for checking whether the data is valid!
+
+        Args:
+            name (str): file name, what shows in the list widget.
+            data (dict): either an space switch or ikfk switch dictionary
+        """      
+        if self._file_list_widget.findItems(name, QtCore.Qt.MatchExactly):
+            double_warning("Item already exists in the list!")
+            return
+
+        self._file_list_items[name] = data
+        self._file_list_widget.addItem(name)
 
     def _save_switch_data(self):
         """Save space switch JSON file.
         """
         # check currentTab type (currentIndex, currentWidget)
-        name = "test"
-        file_name = QtWidgets.QFileDialog.getSaveFileName(self, "Save",
-            "{}{}.json".format(get_current_folder(), name), "*.json"
-        )[0]
+        tab = self._tabs.currentWidget()
+        if tab is self._space_switch_tab:
+            if self.validate_switch_data("space switch"):
+                name = "space switch"
+                data = self._space_switch_data_dict
+            else:
+                double_warning("Data incomplete, please review all entries!")
+                return
 
+        elif tab is self._ik_fk_switch_tab:
+            if self.validate_switch_data("ikfk switch"):
+                name = "ikfk switch"
+                data = self._ikfk_switch_data_dict
+            else:
+                double_warning("Data incomplete, please review all entries!")
+                return
+
+        else: # tab is self._main_switch_tab
+            # pick the current selected list item and save
+            if self._selected_item:
+                name = self._selected_item.text()
+                data = self._file_list_items[name]
+            else:
+                double_warning("Please select an item form the list!")
+                return
+
+        # if default_dir is empty, goes to the default Maya folder
+        default_dir = SpaceSwitchTool.folder_path_str or get_current_folder() 
+        default_path = os.path.join(default_dir, "{}.json".format(name))
+        file_name = QtWidgets.QFileDialog.getSaveFileName(self, "Save",
+                                                          default_path,
+                                                          "*.json")[0]
         if file_name:
-            data = {}
             with open(file_name, "w") as out_file:
                 json.dump(data, out_file)
 
-    def _load_switch_data(self):
+    def _load_switch_data(self, file_name=None, give_warning=True):
         """Load space switch JSON file.
         """
-        file_name = QtWidgets.QFileDialog.getOpenFileName(self, "Load", "",
-                                                         "*.json")[0]
-        
-        if file_name:
-            with open(file_name) as in_file:
-                try:
-                    data = json.load(in_file)
-                except ValueError, msg: # when JSON file is empty
-                    double_warning(msg)
-                    return
-            for name, info in data.iteritems():
-                # add to item to list and load to appropriate tab
-                print name, info
+        if not file_name:
+            # if default_dir is empty, goes to the last opened folder
+            default_dir = (SpaceSwitchTool.folder_path_str
+                           or get_current_folder())
+            file_name = QtWidgets.QFileDialog.getOpenFileName(self, "Load",
+                                                              default_dir,
+                                                              "*.json")[0]
+            if not file_name:
+                return
+
+        with open(file_name) as in_file:
+            try:
+                data = json.load(in_file)
+            except ValueError, msg: # when JSON file is empty
+                double_warning(str(msg))
+                return
+
+        tab = self._tabs.currentWidget()
+        warning_msg = ("Invalid json file selected!\nMake sure the "
+                       "selected json file is a proper\nspace switch "
+                       "data and target rigs are loaded in the scene")
+
+        if tab is self._space_switch_tab:
+            if self.validate_switch_data("space switch", data):
+                self._space_switch_data_dict = data
+                self._populate_space_switch_UI()
+            else:
+                double_warning(warning_msg)
+
+        elif tab is self._ik_fk_switch_tab:
+            if self.validate_switch_data("ikfk switch", data):
+                self._ikfk_switch_data_dict = data
+                self._populate_ikfk_switch_UI()
+            else:
+                if give_warning: # disable warning when populating list widget
+                    double_warning(warning_msg)
+
+        else: # tab is self._main_switch_tab
+            # validate data to see if it belongs to either switch mode
+            name = os.path.splitext(path_leaf(file_name))[0]
+            valid = (self.validate_switch_data("space switch", data)
+                     or self.validate_switch_data("ikfk switch", data))
+            if valid:
+                self._add_item(name, data)
+            else:
+                double_warning(warning_msg)
 
     def _toggle_time_range(self):
         """When checked, makes custom time range section available for user.
@@ -934,15 +1057,94 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """For user to get folder path of a character, and load all the switch
         file into list widget.
         """
+        # if default_dir is empty, goes to the last opened folder
+        default_dir = SpaceSwitchTool.folder_path_str or get_current_folder()       
         folder_name = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Load a directory", SpaceSwitchTool.folder_path_str
+            self, "Load a directory", default_dir
         )
         if folder_name:
             # this will NOT trigger the editingFinished for QLineEdit
             self._folder_path_field.setText(folder_name)
             SpaceSwitchTool.folder_path_str = folder_name
+            self.populate_list_widget()
 
         self.setFocus()
+
+    def populate_list_widget(self, give_warning=True):
+        """Read folder directory and populate the list widget.
+        """
+        print "list populated"
+        # clear list
+        self._file_list_widget.clear()
+        self._file_list_items = {}
+
+        path = SpaceSwitchTool.folder_path_str
+        if os.path.isdir(path):
+            data_files = [f for f in os.listdir(path) if f.endswith(".json")]
+            for f in data_files:
+                file_path = os.path.join(path, f)
+                self._load_switch_data(file_name=file_path, give_warning=False)
+        else:
+            if give_warning:
+                double_warning("Directory {} no longer exists!".format(path))
+            self._folder_path_field.setText("")
+            SpaceSwitchTool.folder_path_str = ""
+
+    def _populate_space_switch_UI(self):
+        """Read internal data and populate the space switch UI.
+        """
+        # assign variables
+        ctl = self._space_switch_data_dict["target control"]
+        source_space = self._space_switch_data_dict["source space"][0]
+        source_value = self._space_switch_data_dict["source space"][1]
+        target_space = self._space_switch_data_dict["target space"][0]
+        target_value = self._space_switch_data_dict["target space"][1]
+
+        # populate labels
+        self._load_ctl_lbl.setText(ctl)
+        self._load_source_lbl.setText("{}  {}".format(source_space,
+                                                      source_value))
+        self._load_target_lbl.setText("{}  {}".format(target_space,
+                                                      target_value))
+
+    def _populate_ikfk_switch_UI(self):
+        """Read internal data and populate the ikfk switch UI.
+        """
+        # assign variables
+        shoulder_jnt = self._ikfk_switch_data_dict["shoulder joint"]
+        elbow_jnt = self._ikfk_switch_data_dict["elbow joint"]
+        wrist_jnt = self._ikfk_switch_data_dict["wrist joint"]
+        fk_shoulder = self._ikfk_switch_data_dict["fk shoulder"]
+        fk_elbow = self._ikfk_switch_data_dict["fk elbow"]
+        fk_wrist = self._ikfk_switch_data_dict["fk wrist"]
+        fk_switch_attr = self._ikfk_switch_data_dict["fk switch"][0]
+        fk_switch_value = self._ikfk_switch_data_dict["fk switch"][1]
+        fk_vis_attr = self._ikfk_switch_data_dict["fk visibility"][0]
+        fk_vis_value = self._ikfk_switch_data_dict["fk visibility"][1]
+        ik_elbow = self._ikfk_switch_data_dict["ik elbow"]
+        ik_wrist = self._ikfk_switch_data_dict["ik wrist"]
+        ik_switch_attr = self._ikfk_switch_data_dict["ik switch"][0]
+        ik_switch_value = self._ikfk_switch_data_dict["ik switch"][1]
+        ik_vis_attr = self._ikfk_switch_data_dict["ik visibility"][0]
+        ik_vis_value = self._ikfk_switch_data_dict["ik visibility"][1]
+
+        # populate labels
+        self._load_shoulder_jnt_lbl.setText(shoulder_jnt)
+        self._load_elbow_jnt_lbl.setText(elbow_jnt)
+        self._load_wrist_jnt_lbl.setText(wrist_jnt)
+        self._load_fk_shoulder_lbl.setText(fk_shoulder)
+        self._load_fk_elbow_lbl.setText(fk_elbow)
+        self._load_fk_wrist_lbl.setText(fk_wrist)
+        self._load_fk_switch_lbl.setText("{}  {}".format(fk_switch_attr,
+                                                         fk_switch_value))
+        self._load_fk_vis_lbl.setText("{}  {}".format(fk_vis_attr,
+                                                      fk_vis_value))
+        self._load_ik_elbow_lbl.setText(ik_elbow)
+        self._load_ik_wrist_lbl.setText(ik_wrist)
+        self._load_ik_switch_lbl.setText("{}  {}".format(ik_switch_attr,
+                                                         ik_switch_value))
+        self._load_ik_vis_lbl.setText("{}  {}".format(ik_vis_attr,
+                                                      ik_vis_value))
 
     def load_attr_value(self, key, lbl):
         """Takes a key value and stores the attribute selected by the user into
@@ -967,14 +1169,12 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             return # escape from here if selected attribute is valid
 
         # if selection is invalid, restore to default instruction
-        if key == "source space":
-            self._space_switch_data_dict[key] = []
-        elif key == "target space":
+        if key in ["source space", "target space"]:
             self._space_switch_data_dict[key] = []
         else: # attributes for ik/fk switch
             self._ikfk_switch_data_dict[key] = []
         double_warning(
-            "invalid selection!\n--- please load {} ---".format(key)
+            "Invalid selection!\n--- please load {} ---".format(key)
         )
         lbl.setText(self._default_empty_lbl)
 
@@ -1003,52 +1203,67 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         else: # controls for ik/fk switch
             self._ikfk_switch_data_dict[key] = ""
         double_warning(
-            "invalid selection!\n--- please select {} ---".format(key)
+            "Invalid selection!\n--- please select {} ---".format(key)
         )
         lbl.setText(self._default_empty_lbl)
 
-    def validate_space_switch_data(self):
+    def validate_switch_data(self, switch_mode="space switch", data=None):
         """Validates all required data right before executing the
-        space_switch method.
+        space_switch / ikfk_switch method.
+
+        TODO: need to have a more thorough check to see if all keys & values
+              are correct (right now it does not do that)
+
+        Args:
+            data (dict): option for checking imported dictionary data
 
         Returns:
             bool: True if successful, False otherwise.
         """
-        for key, value in self._space_switch_data_dict.iteritems():
-            if not value: # check if user input is empty
+        # check for input arg
+        if switch_mode == "space switch":
+            switch_data = data or self._space_switch_data_dict
+            std_keys = ["mode", "target control", "source space",
+                        "target space"]
+            attr_keys = ["source space", "target space"]
+        else: # switch_mode == "ikfk switch"
+            switch_data = data or self._ikfk_switch_data_dict
+            std_keys = ["mode", "shoulder joint", "elbow joint", "wrist joint",
+                        "fk shoulder", "fk elbow", "fk wrist", "fk switch",
+                        "fk visibility", "ik elbow", "ik wrist", "ik switch",
+                        "ik visibility"]
+            attr_keys = ["fk switch", "ik switch", "fk visibility",
+                         "ik visibility"]
+
+        # check if the keys are correct!
+        if (not set(switch_data.keys()) == set(std_keys)):
+            return
+
+        for key, value in switch_data.iteritems():
+            if not value: # check if any user input is empty
                 return False
-            if key == "source space" or key == "target space":
-                node, attr = value[0].split(".")
-                # check if the attributes still exist in the scene
-                if not cmds.attributeQuery(attr, node=node, exists=True):
-                    return False
-            else: # key == "target control"
-                # check if the control still exist in the scene
-                if not cmds.objExists(value):
-                    return False
 
-        # all user inputs are still valid
-        return True
-
-    def validate_ikfk_switch_data(self):
-        """Validates all required data right before executing the
-        ikfk_switch method.
-
-        Returns:
-            bool: True if successful, False otherwise.
-        """
-        for key, value in self._ikfk_switch_data_dict.iteritems():
-            if not value: # check if user input is empty
-                return False
-            if key in ["fk switch", "ik switch",
-                       "fk visibility", "ik visibility"]:
-                node, attr = value[0].split(".")
-                # check if the attributes still exist in the scene
-                if not cmds.attributeQuery(attr, node=node, exists=True):
+            if key in attr_keys:
+                if isinstance(value, list) and len(value) == 2:
+                    node, attr = value[0].split(".")
+                    if not cmds.objExists(node): # check if object still exists
+                        return False
+                    # check if attribute still exists
+                    if not cmds.attributeQuery(attr, node=node, exists=True):
+                        return False
+                else:
                     return False
-            else: # key == control or joint
-                # check if the object still exist in the scene
-                if not cmds.objExists(value):
+            else:
+                if isinstance(value, basestring):
+                    if key == "mode":
+                        if value not in ["space switch", "ikfk switch"]:
+                            return False
+
+                    else: # key is a control
+                        # check if the control still exist in the scene
+                        if not cmds.objExists(value):
+                            return False
+                else:
                     return False
 
         # all user inputs are still valid
@@ -1120,7 +1335,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly
-        if not self.validate_space_switch_data():
+        if not self.validate_switch_data("space switch"):
             double_warning(
                 "Attributes and control are invalid!"
                 "\nPlease follow instruction!"
@@ -1163,7 +1378,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                         keyframes = new_keys
 
                     if not keyframes:
-                        double_warning("no keys to bake!")
+                        double_warning("No keys to bake!")
                         raise Exception # escape the block
 
                     matrixData = []
@@ -1333,37 +1548,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         TODO: too long at the moment, figure out a way to break this method up.
         """
-        # test using Norman
-        self._ikfk_switch_data_dict["shoulder joint"] = "max:Shoulder_L"
-        self._ikfk_switch_data_dict["elbow joint"] = "max:Elbow_L"
-        self._ikfk_switch_data_dict["wrist joint"] = "max:Wrist_L"
-        self._ikfk_switch_data_dict["ik wrist"] = "max:IKArm_L"
-        self._ikfk_switch_data_dict["ik elbow"] = "max:PoleArm_L"
-        self._ikfk_switch_data_dict["fk visibility"] = ["max:FKIKArm_L.FKVis", 0]
-        self._ikfk_switch_data_dict["ik visibility"] = ["max:FKIKArm_L.IKVis", 1]
-        self._ikfk_switch_data_dict["ik switch"] = ["max:FKIKArm_L.FKIKBlend", 10]
-        self._ikfk_switch_data_dict["fk switch"] = ["max:FKIKArm_L.FKIKBlend", 0]
-        self._ikfk_switch_data_dict["fk shoulder"] = "max:FKShoulder_L"
-        self._ikfk_switch_data_dict["fk elbow"] = "max:FKElbow_L"
-        self._ikfk_switch_data_dict["fk wrist"] = "max:FKWrist_L"
-        
-        # # test using Caroline     
-        # self._ikfk_switch_data_dict["shoulder joint"] = "CarolineRig_v4_REF:rig_left_shoulder"
-        # self._ikfk_switch_data_dict["elbow joint"] = "CarolineRig_v4_REF:rig_left_elbow"
-        # self._ikfk_switch_data_dict["wrist joint"] = "CarolineRig_v4_REF:rig_left_wrist"
-        # self._ikfk_switch_data_dict["ik wrist"] = "CarolineRig_v4_REF:ctl_ik_left_hand"
-        # self._ikfk_switch_data_dict["ik elbow"] = "CarolineRig_v4_REF:ctl_ik_left_elbow"
-        # self._ikfk_switch_data_dict["fk visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
-        # self._ikfk_switch_data_dict["ik visibility"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
-        # self._ikfk_switch_data_dict["ik switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 0]
-        # self._ikfk_switch_data_dict["fk switch"] = ["CarolineRig_v4_REF:ctl_left_arm_settings.IKFK", 1]
-        # self._ikfk_switch_data_dict["fk shoulder"] = "CarolineRig_v4_REF:ctl_fk_left_shoulder"
-        # self._ikfk_switch_data_dict["fk elbow"] = "CarolineRig_v4_REF:ctl_fk_left_elbow"
-        # self._ikfk_switch_data_dict["fk wrist"] = "CarolineRig_v4_REF:ctl_fk_left_wrist"
-
         # check internal data to make sure user did not remove or rename stuffs
         # from the scene randomly 
-        if not self.validate_ikfk_switch_data():
+        if not self.validate_switch_data("ikfk switch"):
             double_warning(
                 "Either joints, controls or attributes loaded are invalid!"
                 "\nPlease read the tooltip of each button for instruction."
@@ -1454,7 +1641,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                     keyframes = new_keys
 
                 if not keyframes:
-                    double_warning("no keys to bake!")
+                    double_warning("No keys to bake!")
                     # raise Exception # escape the block
                     return # for now
 
@@ -1685,8 +1872,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         #     unlock_viewport()
         #     cmds.undoInfo(closeChunk=True)
 
-
-
     def get_ik_to_fk_switch(self, shoulder_jnt, elbow_jnt, wrist_jnt):
         """Executes the main ik --> fk switch operation using internal data.
 
@@ -1736,11 +1921,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             cmds.xform(fk, rotation=value, worldSpace=True)
             create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
 
-
-
-
-
-
     def get_fk_to_ik_switch(self, shoulder_jnt, elbow_jnt, wrist_jnt,
                             ik_wrist, ik_switch_attr, ik_switch_value):
         """Executes the main fk --> ik switch operation using internal data.
@@ -1788,12 +1968,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         new_elbow_pos = (aim_vector.x, aim_vector.y, aim_vector.z)
 
         return wrist_pos, wrist_rot, new_elbow_pos
-
-
-        
-
-
-
 
     def set_fk_to_ik_switch(self, ik_wrist, ik_elbow, wrist_pos, wrist_rot,
                             elbow_pos, ik_switch_attr, ik_switch_value,
