@@ -494,7 +494,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             SpaceSwitchTool.folder_path_str
         )
         self._load_path_btn = QtWidgets.QPushButton()
-        self._file_list_widget = QtWidgets.QListWidget()
+        self._refresh_list_btn = QtWidgets.QPushButton()
+        self._file_list_widget = QtWidgets.QListWidget() # single selection
+        self._list_item_popup_menu = QtWidgets.QMenu(self)
+        self._delete_action = QtWidgets.QAction("delete", self)
         self._tutorial_lbl = QtWidgets.QLabel(self._tutorial_txt)
 
         # build space switch widgets
@@ -553,7 +556,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._set_widgets()
         self._set_layouts()
         self._connect_signals()
-        self.populate_list_widget(give_warning=False)
+        self.populate_list_widget()
 
     def _set_widgets(self):
         '''Sets all parameters for the widgets.
@@ -586,6 +589,15 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         )
         self._load_path_btn.setIcon(load_path_icon)
         self._load_path_btn.setFixedSize(24,24)
+        refresh_list_icon = QtWidgets.QApplication.style().standardIcon(
+            QtWidgets.QStyle.SP_BrowserReload
+        )
+        self._refresh_list_btn.setIcon(refresh_list_icon)
+        self._refresh_list_btn.setFixedSize(24,24)       
+        self._file_list_widget.setContextMenuPolicy(
+            QtCore.Qt.CustomContextMenu
+        )
+        self._list_item_popup_menu.addAction(self._delete_action)
 
         # set space switch loading buttons
         self._load_ctl_btn.setFixedSize(90,30)
@@ -720,6 +732,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # organize main switch tab layouts
         main_switch_folder_lyt.addWidget(self._folder_path_field)
         main_switch_folder_lyt.addWidget(self._load_path_btn)
+        main_switch_folder_lyt.addWidget(self._refresh_list_btn)
         main_switch_list_lyt.addWidget(self._file_list_widget)
         main_switch_list_lyt.addWidget(self._tutorial_lbl)
 
@@ -782,7 +795,12 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # connect main switch buttons
         self._folder_path_field.editingFinished.connect(self._folder_path_changed)
         self._load_path_btn.clicked.connect(self.get_folder_path)
+        self._refresh_list_btn.clicked.connect(self.populate_list_widget)
         self._file_list_widget.itemClicked.connect(self._list_item_selected)
+        self._file_list_widget.customContextMenuRequested.connect(
+            self._context_menu
+        )
+        self._delete_action.triggered.connect(self._delete_item)
 
         # connect space switch buttons
         self._load_source_btn.clicked.connect(partial(self.load_attr_value,
@@ -870,9 +888,25 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # connect execution
         self._swtich_btn.clicked.connect(self.execute_switch)
 
+    def _context_menu(self, point):
+        """Bring out right click menu for listWidget item, and update internal
+        data of item selected.
+
+        Args:
+            point (QPoint): show coordinates at where mouse is clicked.
+        """
+        item = self._file_list_widget.selectedItems()
+        if item:
+            item = item[0] # list widget is limited to single selection
+            if item is not self._selected_item:
+                self._update_selected_item(item)
+            self._list_item_popup_menu.popup(
+                self._file_list_widget.mapToGlobal(point)
+            )
+
     def _folder_path_changed(self):
-        """Validate the new folder path, and load all the switch data indside
-        if folder is valid.
+        """When directory is edited, validate the new folder path, and load all
+        the switch data indside if folder is valid.
 
         TODO: when Return is pressed, editingFinished is triggered twice,
               from both Return AND escaping focus. Super annoying!
@@ -881,37 +915,51 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         if os.path.isdir(folder_name):
             SpaceSwitchTool.folder_path_str = folder_name
         else:
-            self._folder_path_field.setText(SpaceSwitchTool.folder_path_str)
+            # in case the directory is no longer valid
+            if self.validate_directory():
+                self._folder_path_field.setText(
+                    SpaceSwitchTool.folder_path_str
+                )
 
-        self.populate_list_widget()
         self.setFocus()
+
+    def _update_selected_item(self, item):
+        """Updates the self._selected_item with the given item widget and
+        populate the corresponding UI components. This method handles item cliked
+        (left and right) and also auto selection after deleting a list item.
+
+        Args:
+            name (QListWidgetItem): given list widget item object.
+        """
+        name = item.text()
+        data = self._file_list_items[name]
+        if data["mode"] == "space switch":
+            self._space_switch_data_dict = data.copy()
+            self._populate_space_switch_UI()
+        else: # data["mode"] == "ikfk switch"
+            self._ikfk_switch_data_dict = data.copy()
+            self._populate_ikfk_switch_UI()
+        self._selected_item = item
 
     def _list_item_selected(self):
         """Detects when a list item is selected and updates the internal data
-        and UI, or deselect when a selected item was clicked.
+        and UI, or deselect when a selected item was clicked (responds only to
+        left mouse clikc).
         """
         item = self._file_list_widget.currentItem()
-        name = item.text()
         if item is self._selected_item:
             self._file_list_widget.setItemSelected(item, False) # deselect
             self._selected_item = None
             # leave the data_dict be, no need to empty it when deselect
         else:
-            data = self._file_list_items[name]
-            if data["mode"] == "space switch":
-                self._space_switch_data_dict = data.copy()
-                self._populate_space_switch_UI()
-            else: # data["mode"] == "ikfk switch"
-                self._ikfk_switch_data_dict = data.copy()
-                self._populate_ikfk_switch_UI()
-            self._selected_item = item
+            self._update_selected_item(item)
 
     def _add_item(self, name, data):
         """Internal method that adds the imported data into list widget. This
         method is not responsible for checking whether the data is valid!
 
         Args:
-            name (str): file name, what shows in the list widget.
+            name (str): file name, title of the list widget item.
             data (dict): either an space switch or ikfk switch dictionary
         """      
         if self._file_list_widget.findItems(name, QtCore.Qt.MatchExactly):
@@ -920,6 +968,26 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         self._file_list_items[name] = data
         self._file_list_widget.addItem(name)
+
+    def _delete_item(self):
+        """Internal method that executes when delete action on the right click
+        menu is triggered. Cleans up the internal data.
+
+        NOTE: QListWidget auto-select the next item after item deletion.
+        """
+        row = self._file_list_widget.currentRow()
+        name = self._selected_item.text()
+        self._file_list_widget.takeItem(row) # does not clean up
+        self._file_list_items.pop(name)
+        del self._selected_item # clean up item widget
+        
+        # handles the next selection, keep consistency in behavior
+        item = self._file_list_widget.selectedItems()
+        if item:
+            item = item[0] # list widget is limited to single selection
+            self._update_selected_item(item)
+        else: # the list is emptied
+            self._selected_item = None
 
     def _save_switch_data(self):
         """Save space switch JSON file.
@@ -998,8 +1066,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                 self._ikfk_switch_data_dict = data
                 self._populate_ikfk_switch_UI()
             else:
-                if give_warning: # disable warning when populating list widget
-                    double_warning(warning_msg)
+                double_warning(warning_msg)
 
         else: # tab is self._main_switch_tab
             # validate data to see if it belongs to either switch mode
@@ -1009,7 +1076,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             if valid:
                 self._add_item(name, data)
             else:
-                double_warning(warning_msg)
+                if give_warning: # disable warning when populating list widget
+                    double_warning(warning_msg)
 
     def _toggle_time_range(self):
         """When checked, makes custom time range section available for user.
@@ -1066,29 +1134,22 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             # this will NOT trigger the editingFinished for QLineEdit
             self._folder_path_field.setText(folder_name)
             SpaceSwitchTool.folder_path_str = folder_name
-            self.populate_list_widget()
 
         self.setFocus()
 
-    def populate_list_widget(self, give_warning=True):
-        """Read folder directory and populate the list widget.
+    def populate_list_widget(self):
+        """Read folder directory and re-populate the list widget.
         """
-        print "list populated"
         # clear list
         self._file_list_widget.clear()
         self._file_list_items = {}
 
-        path = SpaceSwitchTool.folder_path_str
-        if os.path.isdir(path):
+        if self.validate_directory():
+            path = SpaceSwitchTool.folder_path_str
             data_files = [f for f in os.listdir(path) if f.endswith(".json")]
             for f in data_files:
                 file_path = os.path.join(path, f)
                 self._load_switch_data(file_name=file_path, give_warning=False)
-        else:
-            if give_warning:
-                double_warning("Directory {} no longer exists!".format(path))
-            self._folder_path_field.setText("")
-            SpaceSwitchTool.folder_path_str = ""
 
     def _populate_space_switch_UI(self):
         """Read internal data and populate the space switch UI.
@@ -1206,6 +1267,25 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             "Invalid selection!\n--- please select {} ---".format(key)
         )
         lbl.setText(self._default_empty_lbl)
+
+    def validate_directory(self):
+        """Validates directory currently loaded, handles situation where
+        directory is modified or deleted by user.
+
+        Returns:
+            bool: True if directory still valid, False otherwise.
+        """
+        if SpaceSwitchTool.folder_path_str:
+            if os.path.isdir(SpaceSwitchTool.folder_path_str):
+                return True # directory still exists
+            else:
+                double_warning("Directory {} no longer exists!".format(
+                    SpaceSwitchTool.folder_path_str
+                ))
+                SpaceSwitchTool.folder_path_str = ""
+
+        self._folder_path_field.setText("")
+        return False
 
     def validate_switch_data(self, switch_mode="space switch", data=None):
         """Validates all required data right before executing the
