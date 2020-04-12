@@ -442,7 +442,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         super(SpaceSwitchTool, self).__init__(parent)
         # self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         self.setWindowTitle(win_name)
-        self.setFixedWidth(350)
+        self.setFixedSize(350, 644)
+        # self.setFixedWidth(350)
+        # self.setMinimumHeight(644)
 
         # set label messages
         self._title_txt = "\nPlease follow the instructions below:\n"
@@ -488,7 +490,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._load_data_btn = QtWidgets.QPushButton()
         self._save_data_btn = QtWidgets.QPushButton()
 
-        # build main switch widgets
+        # build main switch widgets and layouts
         # self._folder_path_lbl = QtWidgets.QLabel("Directory:")
         self._folder_path_field = QtWidgets.QLineEdit(
             SpaceSwitchTool.folder_path_str
@@ -499,6 +501,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._list_item_popup_menu = QtWidgets.QMenu(self)
         self._delete_action = QtWidgets.QAction("delete", self)
         self._tutorial_lbl = QtWidgets.QLabel(self._tutorial_txt)
+        self._main_switch_side_lyt = QtWidgets.QVBoxLayout()
 
         # build space switch widgets
         self._load_ctl_btn = QtWidgets.QPushButton("Load Control")
@@ -508,7 +511,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._load_target_btn = QtWidgets.QPushButton("Load Target")
         self._load_target_lbl = QtWidgets.QLabel(self._default_empty_lbl)
         
-        # build ik/fk switch widgets
+        # build ik/fk switch widgets and layouts
         self._load_shoulder_jnt_btn = QtWidgets.QPushButton("Load Shoulder "
                                                             "Joint")
         self._load_shoulder_jnt_lbl = QtWidgets.QLabel(self._default_empty_lbl)
@@ -537,6 +540,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._ikfk_mode_btnGrp = QtWidgets.QButtonGroup(self)
         self._ik_to_fk_radbtn = QtWidgets.QRadioButton("IK -> FK")
         self._fk_to_ik_radbtn = QtWidgets.QRadioButton("FK -> IK")
+        self._ikfk_mode_widget = QtWidgets.QWidget(self)
+        self._ik_fk_switch_lyt = QtWidgets.QVBoxLayout()
 
         # build extra option widgets
         self._timeline_btnGrp = QtWidgets.QButtonGroup(self)
@@ -598,13 +603,14 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             QtCore.Qt.CustomContextMenu
         )
         self._list_item_popup_menu.addAction(self._delete_action)
+        self._tutorial_lbl.setMargin(10)
 
         # set space switch loading buttons
-        self._load_ctl_btn.setFixedSize(90,30)
+        self._load_ctl_btn.setFixedSize(120,30)
         self._load_ctl_lbl.setAlignment(QtCore.Qt.AlignCenter)
-        self._load_source_btn.setFixedSize(90,30)
+        self._load_source_btn.setFixedSize(120,30)
         self._load_source_lbl.setAlignment(QtCore.Qt.AlignCenter)     
-        self._load_target_btn.setFixedSize(90,30)
+        self._load_target_btn.setFixedSize(120,30)
         self._load_target_lbl.setAlignment(QtCore.Qt.AlignCenter)
 
         # set ik/fk switch loading buttons
@@ -656,8 +662,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         main_switch_lyt = QtWidgets.QVBoxLayout(self._main_switch_tab)
         main_switch_folder_lyt = QtWidgets.QHBoxLayout(self._main_switch_tab)
         main_switch_list_lyt = QtWidgets.QHBoxLayout(self._main_switch_tab)
-        space_switch_lyt = QtWidgets.QVBoxLayout(self._space_switch_tab)
-        ik_fk_switch_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
+        space_switch_lyt = QtWidgets.QVBoxLayout(self._space_switch_tab) 
+        ikfk_mode_lyt = QtWidgets.QHBoxLayout(self._ikfk_mode_widget)
         # ik_fk_switch_sub_lyt = QtWidgets.QHBoxLayout(self._ik_fk_switch_tab)
         # ik_fk_switch_sub1_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
         # ik_fk_switch_sub2_lyt = QtWidgets.QVBoxLayout(self._ik_fk_switch_tab)
@@ -680,7 +686,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         load_ik_wrist_lyt = QtWidgets.QHBoxLayout(self)
         load_ik_switch_lyt = QtWidgets.QHBoxLayout(self)
         load_ik_vis_lyt = QtWidgets.QHBoxLayout(self)
-        ikfk_mode_lyt = QtWidgets.QHBoxLayout(self)
 
         # initialize extra option layouts
         time_range_option_lyt = QtWidgets.QHBoxLayout(self)
@@ -701,25 +706,23 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         space_switch_lyt.addLayout(load_source_lyt)
         space_switch_lyt.addLayout(load_target_lyt)
         space_switch_lyt.addStretch()
-        # ik_fk_switch_lyt.addLayout(ik_fk_switch_sub_lyt)
+        # self._ik_fk_switch_lyt.addLayout(ik_fk_switch_sub_lyt)
         # ik_fk_switch_sub_lyt.addLayout(ik_fk_switch_sub1_lyt)
         # ik_fk_switch_sub_lyt.addLayout(ik_fk_switch_sub2_lyt)
-        ik_fk_switch_lyt.addLayout(load_shoulder_jnt_lyt)
-        ik_fk_switch_lyt.addLayout(load_elbow_jnt_lyt)
-        ik_fk_switch_lyt.addLayout(load_wrist_jnt_lyt)
-        ik_fk_switch_lyt.addLayout(load_ik_switch_lyt)
-        # ik_fk_switch_lyt.addLayout(load_ik_vis_lyt) # TODO: future optional visibility switch, ignore for now
-        ik_fk_switch_lyt.addLayout(load_ik_elbow_lyt)
-        ik_fk_switch_lyt.addLayout(load_ik_wrist_lyt)
+        self._ik_fk_switch_tab.setLayout(self._ik_fk_switch_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_shoulder_jnt_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_elbow_jnt_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_wrist_jnt_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_ik_switch_lyt)
+        # self._ik_fk_switch_lyt.addLayout(load_ik_vis_lyt) # TODO: future optional visibility switch, ignore for now
+        self._ik_fk_switch_lyt.addLayout(load_ik_elbow_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_ik_wrist_lyt)
         # ik_fk_switch_sub1_lyt.addStretch()
-        ik_fk_switch_lyt.addLayout(load_fk_switch_lyt)
-        ik_fk_switch_lyt.addLayout(load_fk_shoulder_lyt)
-        ik_fk_switch_lyt.addLayout(load_fk_elbow_lyt)
-        ik_fk_switch_lyt.addLayout(load_fk_wrist_lyt)
-        # ik_fk_switch_lyt.addLayout(load_fk_vis_lyt) # TODO: future optional visibility switch, ignore for now
-        ik_fk_switch_lyt.addLayout(ikfk_mode_lyt)
-        # ik_fk_switch_sub2_lyt.addStretch()
-        ik_fk_switch_lyt.addLayout(ikfk_mode_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_fk_switch_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_fk_shoulder_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_fk_elbow_lyt)
+        self._ik_fk_switch_lyt.addLayout(load_fk_wrist_lyt)
+        # self._ik_fk_switch_lyt.addLayout(load_fk_vis_lyt) # TODO: future optional visibility switch, ignore for now
 
         # organize instruction layouts
         title_lyt.addStretch()
@@ -734,7 +737,11 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         main_switch_folder_lyt.addWidget(self._load_path_btn)
         main_switch_folder_lyt.addWidget(self._refresh_list_btn)
         main_switch_list_lyt.addWidget(self._file_list_widget)
-        main_switch_list_lyt.addWidget(self._tutorial_lbl)
+        main_switch_list_lyt.addLayout(self._main_switch_side_lyt)
+        self._main_switch_tab.setLayout(self._main_switch_side_lyt)
+        self._main_switch_side_lyt.addWidget(self._tutorial_lbl)
+        self._main_switch_side_lyt.addStretch()
+        self._main_switch_side_lyt.addWidget(self._ikfk_mode_widget)
 
         # organize space switch tab layouts
         load_ctl_lyt.addWidget(self._load_ctl_btn)
@@ -793,6 +800,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._save_data_btn.clicked.connect(self._save_switch_data)
 
         # connect main switch buttons
+        self._tabs.currentChanged.connect(self._tab_changed)
         self._folder_path_field.editingFinished.connect(self._folder_path_changed)
         self._load_path_btn.clicked.connect(self.get_folder_path)
         self._refresh_list_btn.clicked.connect(self.populate_list_widget)
@@ -887,6 +895,16 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         # connect execution
         self._swtich_btn.clicked.connect(self.execute_switch)
+
+    def _tab_changed(self):
+        """Places the ikfk radio buttons in either the main switch tab or
+        ikfk tab depending on which tab is currently active.
+        """
+        tab = self._tabs.currentWidget()
+        if tab is self._ik_fk_switch_tab:
+            self._ik_fk_switch_lyt.addWidget(self._ikfk_mode_widget)
+        elif tab is self._main_switch_tab:
+            self._main_switch_side_lyt.addWidget(self._ikfk_mode_widget)
 
     def _context_menu(self, point):
         """Bring out right click menu for listWidget item, and update internal
@@ -2037,10 +2055,22 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
                                                   'parentConstraint')
         cmds.setAttr(ik_switch_attr, ik_switch_value)  
-        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space        
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
+        
+        #----------------------------------------------------------------------------
         # get joint position and rotation in world space, again
         wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
                                                   'parentConstraint')
+        cmds.setAttr(ik_switch_attr, ik_switch_value)  
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
+        #----------------------------------------------------------------------------
+        # repeat (in cycle)             NEED to test with other rigs!!!!
+        # x 4   didn't work for both
+        # x 3   didn't work for leg
+        # x 2   didn't work for arm
+        # x 1   didn't work for leg
+        # x 0   didn't work for both
+
         # TODO: find out why. Could it be rotate order?
 
         # restore original matrix
