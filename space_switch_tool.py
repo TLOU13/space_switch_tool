@@ -466,11 +466,11 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                                        "fk elbow":"",
                                        "fk wrist":"",
                                        "fk switch":[],
-                                       "fk visibility":[], # assume 0 and 1
+                                       "fk visibility":"time1", # TODO: future optional visibility switch, ignore for now
                                        "ik elbow":"",
                                        "ik wrist":"",
                                        "ik switch":[],
-                                       "ik visibility":[]} # assume 0 and 1
+                                       "ik visibility":"time1"} # TODO: future optional visibility switch, ignore for now
         self._start_frame = str(int(cmds.playbackOptions(
                                 query=True, minTime=True)))
         self._end_frame = str(int(cmds.playbackOptions(
@@ -708,15 +708,15 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         ik_fk_switch_lyt.addLayout(load_elbow_jnt_lyt)
         ik_fk_switch_lyt.addLayout(load_wrist_jnt_lyt)
         ik_fk_switch_lyt.addLayout(load_ik_switch_lyt)
-        ik_fk_switch_lyt.addLayout(load_ik_vis_lyt)
+        # ik_fk_switch_lyt.addLayout(load_ik_vis_lyt) # TODO: future optional visibility switch, ignore for now
         ik_fk_switch_lyt.addLayout(load_ik_elbow_lyt)
         ik_fk_switch_lyt.addLayout(load_ik_wrist_lyt)
         # ik_fk_switch_sub1_lyt.addStretch()
+        ik_fk_switch_lyt.addLayout(load_fk_switch_lyt)
         ik_fk_switch_lyt.addLayout(load_fk_shoulder_lyt)
         ik_fk_switch_lyt.addLayout(load_fk_elbow_lyt)
         ik_fk_switch_lyt.addLayout(load_fk_wrist_lyt)
-        ik_fk_switch_lyt.addLayout(load_fk_switch_lyt)
-        ik_fk_switch_lyt.addLayout(load_fk_vis_lyt)
+        # ik_fk_switch_lyt.addLayout(load_fk_vis_lyt) # TODO: future optional visibility switch, ignore for now
         ik_fk_switch_lyt.addLayout(ikfk_mode_lyt)
         # ik_fk_switch_sub2_lyt.addStretch()
         ik_fk_switch_lyt.addLayout(ikfk_mode_lyt)
@@ -1312,8 +1312,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                         "fk shoulder", "fk elbow", "fk wrist", "fk switch",
                         "fk visibility", "ik elbow", "ik wrist", "ik switch",
                         "ik visibility"]
-            attr_keys = ["fk switch", "ik switch", "fk visibility",
-                         "ik visibility"]
+            attr_keys = ["fk switch", "ik switch"] # TODO: future optional visibility switch, ignore for now
+                         # "fk visibility", "ik visibility" <-- ignore these for now
 
         # check if the keys are correct!
         if (not set(switch_data.keys()) == set(std_keys)):
@@ -1400,8 +1400,18 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         if self._tabs.currentWidget() is self._space_switch_tab:
             self.space_switch()
-        else: # self._tabs.currentWidget() is self._ik_fk_switch_tab
+        elif self._tabs.currentWidget() is self._ik_fk_switch_tab:
             self.ikfk_switch()
+        else: # self._tabs.currentWidget() is self._main_switch_tab
+            if self._selected_item:
+                name = self._selected_item.text()
+                data = self._file_list_items[name]
+                if data["mode"] == "space switch":
+                    self.space_switch()
+                else: # data["mode"] == "ikfk switch"
+                    self.ikfk_switch()
+            else:
+                double_warning("Please select a list item first!")
 
     def space_switch(self):
         """Executes the main space switch operation using internal data.
@@ -1983,8 +1993,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                 # hold down previous position     
                 create_transform_keys(objects=[fk], rx=True, ry=True, rz=True)
             cmds.setKeyframe(fk_switch_attr)
-            cmds.setKeyframe(fk_vis_attr)
-            cmds.setKeyframe(ik_vis_attr)
+            # cmds.setKeyframe(fk_vis_attr)
+            # cmds.setKeyframe(ik_vis_attr)
 
         # return to given frame
         cmds.currentTime(frame, edit=True)
@@ -2072,8 +2082,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             create_transform_keys(objects=[ik_elbow],
                                   tx=True, ty=True, tz=True)
             cmds.setKeyframe(ik_switch_attr)
-            cmds.setKeyframe(ik_vis_attr)
-            cmds.setKeyframe(fk_vis_attr)
+            # cmds.setKeyframe(ik_vis_attr)
+            # cmds.setKeyframe(fk_vis_attr)
 
         # return to given frame
         cmds.currentTime(frame, edit=True)
