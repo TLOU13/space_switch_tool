@@ -554,8 +554,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._connect_lbl = QtWidgets.QLabel("to")
         self._time_range_widget = QtWidgets.QWidget() # allow enable / disable
 
-        # build execution widget
-        self._swtich_btn = QtWidgets.QPushButton("Switch Space")
+        # build execution widget, default for main switch tab
+        self._swtich_btn = QtWidgets.QPushButton("Please Select an Item")
 
         # set up UI
         self._set_widgets()
@@ -567,9 +567,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         '''Sets all parameters for the widgets.
         '''
         # set up tabs
-        self._tabs.addTab(self._main_switch_tab, "main switch") # index 0
-        self._tabs.addTab(self._space_switch_tab, "space switch") # index 1
-        self._tabs.addTab(self._ik_fk_switch_tab, "ik/fk switch") # index 2
+        self._tabs.addTab(self._main_switch_tab, "character switch") # index 0
+        self._tabs.addTab(self._ik_fk_switch_tab, "set ik/fk input") # index 1
+        self._tabs.addTab(self._space_switch_tab, "set space input") # index 2
 
         # set instruction
         warning_icon = QtWidgets.QApplication.style().standardIcon(
@@ -641,6 +641,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._ik_to_fk_radbtn.setChecked(True)
         self._ikfk_mode_btnGrp.addButton(self._ik_to_fk_radbtn)
         self._ikfk_mode_btnGrp.addButton(self._fk_to_ik_radbtn)
+        self._ikfk_mode_widget.setEnabled(False)
         
         # set extra options
         self._timeline_btnGrp.addButton(self._currentFrame_radbtn)
@@ -652,6 +653,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._end_frame_field.setValidator(CustomIntValidator())
         self._end_frame_field.setFixedWidth(40)
         self._time_range_widget.setDisabled(True)
+
+        # set main switch button state
+        self._swtich_btn.setEnabled(False)
 
     def _set_layouts(self):
         """Sets all layout components.
@@ -897,14 +901,35 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._swtich_btn.clicked.connect(self.execute_switch)
 
     def _tab_changed(self):
-        """Places the ikfk radio buttons in either the main switch tab or
-        ikfk tab depending on which tab is currently active.
+        """Update the UI based on which tab the user is currently in.
+
+        NOTE: places the ikfk radio buttons in either the main switch tab or
+              ikfk tab depending on which tab is currently active.
         """
         tab = self._tabs.currentWidget()
-        if tab is self._ik_fk_switch_tab:
-            self._ik_fk_switch_lyt.addWidget(self._ikfk_mode_widget)
-        elif tab is self._main_switch_tab:
-            self._main_switch_side_lyt.addWidget(self._ikfk_mode_widget)
+
+        if tab is self._main_switch_tab:
+            self._main_switch_side_lyt.addWidget(self._ikfk_mode_widget) # swap
+            self._list_item_deselected() # update state to "nothing selected"
+        
+        else:
+            # deselect any list item when tab is changed
+            self._file_list_widget.setItemSelected(self._selected_item, False) 
+            self._selected_item = None
+
+            if tab is self._space_switch_tab:
+                self._swtich_btn.setText("Switch Space")
+                valid = self.validate_switch_data("space switch")
+            else: # tab is self._ik_fk_switch_tab
+                self._swtich_btn.setText("Switch IK/FK")
+                self._ikfk_mode_widget.setEnabled(True)
+                self._ik_fk_switch_lyt.addWidget(self._ikfk_mode_widget) # swap
+                valid = self.validate_switch_data("ikfk switch")
+
+            if valid:
+                self._swtich_btn.setEnabled(True)
+            else:
+                self._swtich_btn.setEnabled(False)
 
     def _context_menu(self, point):
         """Bring out right click menu for listWidget item, and update internal
@@ -951,13 +976,21 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         name = item.text()
         data = self._file_list_items[name]
+
         if data["mode"] == "space switch":
             self._space_switch_data_dict = data.copy()
             self._populate_space_switch_UI()
+            self._swtich_btn.setText("Switch Space")
+            self._ikfk_mode_widget.setEnabled(False)
+
         else: # data["mode"] == "ikfk switch"
             self._ikfk_switch_data_dict = data.copy()
             self._populate_ikfk_switch_UI()
+            self._swtich_btn.setText("Switch IK/FK")
+            self._ikfk_mode_widget.setEnabled(True)
+
         self._selected_item = item
+        self._swtich_btn.setEnabled(True)
 
     def _list_item_selected(self):
         """Detects when a list item is selected and updates the internal data
@@ -968,9 +1001,17 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         if item is self._selected_item:
             self._file_list_widget.setItemSelected(item, False) # deselect
             self._selected_item = None
+            self._list_item_deselected()
             # leave the data_dict be, no need to empty it when deselect
         else:
             self._update_selected_item(item)
+
+    def _list_item_deselected(self):
+        """Disable widgets when list item is deselected.
+        """
+        self._ikfk_mode_widget.setEnabled(False)
+        self._swtich_btn.setEnabled(False)
+        self._swtich_btn.setText("Please Select an Item")
 
     def _add_item(self, name, data):
         """Internal method that adds the imported data into list widget. This
@@ -1006,6 +1047,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             self._update_selected_item(item)
         else: # the list is emptied
             self._selected_item = None
+            self._list_item_deselected()
 
     def _save_switch_data(self):
         """Save space switch JSON file.
@@ -1076,6 +1118,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             if self.validate_switch_data("space switch", data):
                 self._space_switch_data_dict = data
                 self._populate_space_switch_UI()
+                self._swtich_btn.setEnabled(True)
             else:
                 double_warning(warning_msg)
 
@@ -1083,6 +1126,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             if self.validate_switch_data("ikfk switch", data):
                 self._ikfk_switch_data_dict = data
                 self._populate_ikfk_switch_UI()
+                self._swtich_btn.setEnabled(True)
             else:
                 double_warning(warning_msg)
 
@@ -1169,6 +1213,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                 file_path = os.path.join(path, f)
                 self._load_switch_data(file_name=file_path, give_warning=False)
 
+            # disable widget state to "nothing selected"
+            self._list_item_deselected()
+
     def _populate_space_switch_UI(self):
         """Read internal data and populate the space switch UI.
         """
@@ -1242,9 +1289,16 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             value = cmds.getAttr(attr[0])
             if key in ["source space", "target space"]:
                 self._space_switch_data_dict[key] = [attr[0], value]
+                if self.validate_switch_data("space switch"):
+                    # enable if data is complete
+                    self._swtich_btn.setEnabled(True)
             else:
                 self._ikfk_switch_data_dict[key] = [attr[0], value]
-            lbl.setText("{}  {}".format(attr[0], value))
+                if self.validate_switch_data("ikfk switch"):
+                    # enable if data is complete
+                    self._swtich_btn.setEnabled(True)
+
+            lbl.setText("{}  {}".format(attr[0], value)) # update label
             return # escape from here if selected attribute is valid
 
         # if selection is invalid, restore to default instruction
@@ -1256,6 +1310,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             "Invalid selection!\n--- please load {} ---".format(key)
         )
         lbl.setText(self._default_empty_lbl)
+        self._swtich_btn.setEnabled(False) # data incomplete, disable switch
 
     def load_target_control(self, key, lbl, typ="transform"):
         """Takes a key value and stores the control selected by the user into
@@ -1271,8 +1326,15 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         if len(sel) == 1: # only allow one selected object
             if key == "target control":
                 self._space_switch_data_dict[key] = sel[0]
+                if self.validate_switch_data("space switch"):
+                    # enable if data is complete
+                    self._swtich_btn.setEnabled(True)
             else:
                 self._ikfk_switch_data_dict[key] = sel[0]
+                if self.validate_switch_data("ikfk switch"):
+                    # enable if data is complete
+                    self._swtich_btn.setEnabled(True)
+                    
             lbl.setText(sel[0])
             return # escape from here if selected transform is valid
 
@@ -1285,6 +1347,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             "Invalid selection!\n--- please select {} ---".format(key)
         )
         lbl.setText(self._default_empty_lbl)
+        self._swtich_btn.setEnabled(False) # data incomplete, disable switch
 
     def validate_directory(self):
         """Validates directory currently loaded, handles situation where
@@ -1335,7 +1398,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         # check if the keys are correct!
         if (not set(switch_data.keys()) == set(std_keys)):
-            return
+            return False
 
         for key, value in switch_data.iteritems():
             if not value: # check if any user input is empty
