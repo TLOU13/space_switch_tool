@@ -1777,271 +1777,330 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         #                     fk_vis_attr, fk_vis_value, ik_vis_attr,
         #                     ik_vis_value, frame, prev_frame=None)
 
-        # cmds.undoInfo(openChunk=True)
-        # lock_viewport()
-        # # huge try block is used here to take care of undo chunk
-        # # TODO: replace it using decorator
-        # try: 
-        if self._currentFrame_radbtn.isChecked():
-            # doing one frame switch operation
-            self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt, wrist_jnt,
-                                 fk_shoulder, fk_elbow, fk_wrist,
-                                 fk_switch_attr, fk_switch_value,
-                                 fk_vis_attr, fk_vis_value, ik_vis_attr,
-                                 ik_vis_value, ik_switch_attr,
-                                 ik_switch_value, ik_wrist, ik_elbow,
-                                 current_frame, prev_frame)
+        cmds.undoInfo(openChunk=True)
+        lock_viewport()
+        # huge try block is used here to take care of undo chunk
+        # TODO: replace it using decorator
+        try: 
+            if self._currentFrame_radbtn.isChecked():
+                # doing one frame switch operation
+                self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt, wrist_jnt,
+                                     fk_shoulder, fk_elbow, fk_wrist,
+                                     fk_switch_attr, fk_switch_value,
+                                     fk_vis_attr, fk_vis_value, ik_vis_attr,
+                                     ik_vis_value, ik_switch_attr,
+                                     ik_switch_value, ik_wrist, ik_elbow,
+                                     current_frame, prev_frame)
 
-        else:
-            range_start = int(self._start_frame_field.text())
-            range_end = int(self._end_frame_field.text())
-            keyframes = cmds.keyframe(ctls, query=True, timeChange=True)
-            if keyframes is None:
-                keyframes = [] # set to empty list instead
-            keyframes = list(set(keyframes)) # rid of duplicates
-            keyframes.sort()
+            else:
+                range_start = int(self._start_frame_field.text())
+                range_end = int(self._end_frame_field.text())
+                keyframes = cmds.keyframe(ctls, query=True, timeChange=True)
+                if keyframes is None:
+                    keyframes = [] # set to empty list instead
+                keyframes = list(set(keyframes)) # rid of duplicates
+                keyframes.sort()
 
-            if self._bakeKeyframes_radbtn.isChecked(): # bake at keyframes
-                ref_keys = keyframes[:] # save if for reference
-                if self._set_time_range_chkbx.isChecked():
-                    # only get the keys within set range
-                    new_keys = []
-                    for k in keyframes:
-                        if range_start <= k <= range_end:
-                            new_keys.append(k)
-                    keyframes = new_keys
+                if self._bakeKeyframes_radbtn.isChecked(): # bake at keyframes
+                    ref_keys = keyframes[:] # save if for reference
+                    if self._set_time_range_chkbx.isChecked():
+                        # only get the keys within set range
+                        new_keys = []
+                        for k in keyframes:
+                            if range_start <= k <= range_end:
+                                new_keys.append(k)
+                        keyframes = new_keys
 
-                if not keyframes:
-                    double_warning("No keys to bake!")
-                    # raise Exception # escape the block
-                    return # for now
+                    if not keyframes:
+                        double_warning("No keys to bake!")
+                        # raise Exception # escape the block
+                        return # for now
 
-                # gathering data
-                matrixData = []
-                for key in keyframes:
-                    cmds.currentTime(key, edit=True)
-                    # cmds.setAttr(source_space, source_value)
-                    # cmds.setKeyframe(source_space)
-                    data = self.get_ikfk_data(flag, shoulder_jnt,
-                                              elbow_jnt, wrist_jnt,
-                                              ik_wrist, ik_switch_attr,
-                                              ik_switch_value)
-                    matrixData.append(data)
-
-                # review
-                for i, key in enumerate(keyframes):
-                    a, b, c = matrixData[i]
-                    print key
-                    print a
-                    print b
-                    print c
-                    print
-                return
-
-                # check if closing swap will run, if so, go reverse direction
-                if len(keyframes) > 1 and keyframes[-1] < ref_keys[-1]:
-                    cmds.currentTime(keyframes[-1], edit=True)
-                    end_data = self.get_ikfk_data(not flag, shoulder_jnt,
+                    # gathering data
+                    matrixData = []
+                    for key in keyframes:
+                        cmds.currentTime(key, edit=True)
+                        # cmds.setAttr(source_space, source_value)
+                        # cmds.setKeyframe(source_space)
+                        data = self.get_ikfk_data(flag, shoulder_jnt,
                                                   elbow_jnt, wrist_jnt,
                                                   ik_wrist, ik_switch_attr,
                                                   ik_switch_value)
-                    
-                    # this may or may not be key so we have to be sure
-                    # go to previous frame of the closing switch
-                    # and save data
-                    cmds.currentTime(keyframes[-1] - 1, edit=True)
-                    prev_data = self.get_ikfk_data(flag, shoulder_jnt,
-                                                   elbow_jnt, wrist_jnt,
-                                                   ik_wrist, ik_switch_attr,
-                                                   ik_switch_value)
+                        matrixData.append(data)
 
-                # start the operation
-                if keyframes[0] > ref_keys[0]:
-                    # self.set_space_switch(keyframes[0], ctl,
-                    #                       source_space, source_value,
-                    #                       target_space, target_value,)
+                    # check if closing swap will run, if so, go reverse direction
+                    if len(keyframes) > 1 and keyframes[-1] < ref_keys[-1]:
+                        cmds.currentTime(keyframes[-1], edit=True)
+                        end_data = self.get_ikfk_data(not flag, shoulder_jnt,
+                                                      elbow_jnt, wrist_jnt,
+                                                      ik_wrist, ik_switch_attr,
+                                                      ik_switch_value)
+                        
+                        # the previous frame will get screwed up when the previous
+                        # "keyframe" is set (unless the previous frame itself is a keyframe)
+                        # so we go to the previous frame of the closing switch and save data
+                        cmds.currentTime(keyframes[-1] - 1, edit=True)
+                        prev_data = self.get_ikfk_data(flag, shoulder_jnt,
+                                                       elbow_jnt, wrist_jnt,
+                                                       ik_wrist, ik_switch_attr,
+                                                       ik_switch_value)
+                                        
+                    # operation begins!
+                    # start with first key, make a simple in place switch (but NOPE)
+                    if keyframes[0] > ref_keys[0]:
+                        # WHY is it messing up!!! Somehow the value has been changed in FK --> IK
+                        # most likely due to annoying wrist rotation problem and the hack I did
+                        # (but may also happen to IK --> FK?)
+                        # (dunno, just messed up after matrixData was gathered)
+                        # we will use the matrixData instead, but this is a mystery :(
+                        
+                        # TODO: there are serious issues related to the flip problem,
+                        #       study more vector math to figure this out
+                        
+                        # self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
+                        #                      wrist_jnt, fk_shoulder, fk_elbow,
+                        #                      fk_wrist, fk_switch_attr,
+                        #                      fk_switch_value, fk_vis_attr,
+                        #                      fk_vis_value, ik_vis_attr,
+                        #                      ik_vis_value, ik_switch_attr,
+                        #                      ik_switch_value, ik_wrist,
+                        #                      ik_elbow, keyframes[0],
+                        #                      keyframes[0] - 1)
 
-                    self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
-                                         wrist_jnt, fk_shoulder, fk_elbow,
-                                         fk_wrist, fk_switch_attr,
-                                         fk_switch_value, fk_vis_attr,
-                                         fk_vis_value, ik_vis_attr,
-                                         ik_vis_value, ik_switch_attr,
-                                         ik_switch_value, ik_wrist,
-                                         ik_elbow, keyframes[0],
-                                         keyframes[0] - 1)
+                        if flag: # ikfk
+                            should_rot, elbow_rot, wrist_rot = matrixData[0]
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[0],
+                                                keyframes[0] - 1)                        
 
-                    # remove first keyframe from data
-                    keyframes = keyframes[1:]
-                    matrixData = matrixData[1:]
+                        else: # fkik
+                            wrist_pos, wrist_rot, elbow_pos = matrixData[0]
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[0],
+                                                keyframes[0] - 1)
 
-                # make sure keyframes is not emptied from the first check
-                if keyframes and keyframes[-1] < ref_keys[-1]:
-                    # flip target and source to close chunk
-                    # cannot use set_space_switch method since
-                    # current matrix has already been changed so restore them
-                    if flag: # ikfk
-                        frame = keyframes[-1] # last frame
-                        wrist_pos, wrist_rot, elbow_pos = end_data
-                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
-                                            wrist_rot, elbow_pos,
-                                            ik_switch_attr,
-                                            ik_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, frame)
+                        # remove first keyframe from data
+                        keyframes = keyframes[1:]
+                        matrixData = matrixData[1:]
 
-                        should_rot, elbow_rot, wrist_rot = prev_data
-                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
-                                            fk_wrist, should_rot,
-                                            elbow_rot, wrist_rot,
-                                            fk_switch_attr,
-                                            fk_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, frame)                        
+                    # next, do the end frame, apply the end_data and prev_data
+                    # make sure the list was not emptied after removing the
+                    # first key frame (in case of 1 frame switch)
+                    if keyframes and keyframes[-1] < ref_keys[-1]:
+                        # flip target and source to close chunk
+                        # cannot use set_space_switch method since
+                        # current matrix has already been changed so restore them
+                        if flag: # ikfk
+                            wrist_pos, wrist_rot, elbow_pos = end_data
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[-1])
 
-                    else: # fkik
-                        frame = keyframes[-1] - 1
-                        should_rot, elbow_rot, wrist_rot = end_data
-                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
-                                            fk_wrist, should_rot,
-                                            elbow_rot, wrist_rot,
-                                            fk_switch_attr,
-                                            fk_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, frame)
+                            should_rot, elbow_rot, wrist_rot = prev_data
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[-1] - 1)                        
 
-                        wrist_pos, wrist_rot, elbow_pos = end_data
-                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
-                                            wrist_rot, elbow_pos,
-                                            ik_switch_attr,
-                                            ik_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, frame)
+                        else: # fkik
+                            should_rot, elbow_rot, wrist_rot = end_data
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[-1])
 
-                    # remove last keyframe from data
-                    keyframes = keyframes[:-1]
-                    matrixData = matrixData[:-1]
+                            wrist_pos, wrist_rot, elbow_pos = prev_data
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, keyframes[-1] - 1)
 
-                # anything right on top or outside will run regularly
-                # anything on the insde will make a set_space_switch
-                # inside or outside refers to the outermost two keys
-                for i, key in enumerate(keyframes):
-                    if flag: # ikfk
-                        should_rot, elbow_rot, wrist_rot = matrixData[i]
-                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
-                                            fk_wrist, should_rot,
-                                            elbow_rot, wrist_rot,
-                                            fk_switch_attr,
-                                            fk_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, key)                        
+                        # remove last keyframe from data
+                        keyframes = keyframes[:-1]
+                        matrixData = matrixData[:-1]
 
-                    else: # fkik
-                        wrist_pos, wrist_rot, elbow_pos = matrixData[i]
-                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
-                                            wrist_rot, elbow_pos,
-                                            ik_switch_attr,
-                                            ik_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, key)
+                    # anything right on top or outside will run regularly
+                    # anything on the insde will make a set_space_switch
+                    # inside or outside refers to the outermost two keys
+                    for i, key in enumerate(keyframes):
+                        if flag: # ikfk
+                            should_rot, elbow_rot, wrist_rot = matrixData[i]
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, key)                        
 
-            # section for 'bake every frame'
-            # TODO: check situations when keyframes is [] or 1-2 items
-            else: # self._everyFrame_radbtn_radbtn.isChecked()
-                if not self._set_time_range_chkbx.isChecked():
-                    range_start, range_end, frame_range = (
-                        get_timeline_range()
-                    )
-                time_range = range(int(range_start),
-                                   int(range_end) + 1)
+                        else: # fkik
+                            wrist_pos, wrist_rot, elbow_pos = matrixData[i]
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, key)
 
-                # time_range size will always be 2 or more so skip checking
-                # gathering data
-                matrixData = []
-                for key in keyframes:
-                    cmds.currentTime(key, edit=True)
-                    # cmds.setAttr(source_space, source_value)
-                    # cmds.setKeyframe(source_space)
-                    data = self.get_ikfk_data(flag, shoulder_jnt,
-                                              elbow_jnt, wrist_jnt,
-                                              ik_wrist, ik_switch_attr,
-                                              ik_switch_value)
-                    matrixData.append(data)
+                # section for 'bake every frame'
+                # TODO: check situations when keyframes is [] or 1-2 items
+                else: # self._everyFrame_radbtn_radbtn.isChecked()
+                    if not self._set_time_range_chkbx.isChecked():
+                        range_start, range_end, frame_range = (
+                            get_timeline_range()
+                        )
+                    time_range = range(int(range_start),
+                                       int(range_end) + 1)
 
-                # review
-                for i, key in enumerate(keyframes):
-                    a, b, c = matrixData[i]
-                    print key
-                    print a
-                    print b
-                    print c
-                    print
-                return
+                    # time_range size will always be 2 or more so skip checking
+                    # gathering data
+                    matrixData = []
+                    for frame in time_range:
+                        cmds.currentTime(frame, edit=True)
+                        data = self.get_ikfk_data(flag, shoulder_jnt,
+                                                  elbow_jnt, wrist_jnt,
+                                                  ik_wrist, ik_switch_attr,
+                                                  ik_switch_value)
+                        matrixData.append(data)
 
+                    # check if closing swap will run, if so, go reverse direction
+                    # time_range size will always be 2 or more so skip checking
+                    # since it is bake every frame, no need to do the frame before
+                    if keyframes[-1] > time_range[-1]:
+                        cmds.currentTime(time_range[-1], edit=True)
+                        end_data = self.get_ikfk_data(not flag, shoulder_jnt,
+                                                      elbow_jnt, wrist_jnt,
+                                                      ik_wrist, ik_switch_attr,
+                                                      ik_switch_value)
 
-                if keyframes[0] < time_range[0]:
-                    # self.set_space_switch(time_range[0], ctl,
-                    #                       source_space, source_value,
-                    #                       target_space, target_value,)
-                    self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
-                                         wrist_jnt, fk_shoulder, fk_elbow,
-                                         fk_wrist, fk_switch_attr,
-                                         fk_switch_value, fk_vis_attr,
-                                         fk_vis_value, ik_vis_attr,
-                                         ik_vis_value, ik_switch_attr,
-                                         ik_switch_value, ik_wrist,
-                                         ik_elbow, time_range[0],
-                                         time_range[0] - 1)
-                    time_range = time_range[1:]
-                    matrixData = matrixData[1:]
+                    # operation begins!
+                    if keyframes[0] < time_range[0]:
+                        # set a simple in place switch on the first frame
+                        # does NOT work, same issue as above, values broken
+                        # after gathering matrix data :(
 
-                if keyframes[-1] > time_range[-1]:
-                    # self.set_space_switch(time_range[-1], ctl,
-                    #                       target_space, target_value,
-                    #                       source_space, source_value,)
-                    self.set_ikfk_switch(not flag, shoulder_jnt, elbow_jnt,
-                                         wrist_jnt, fk_shoulder, fk_elbow,
-                                         fk_wrist, fk_switch_attr,
-                                         fk_switch_value, fk_vis_attr,
-                                         fk_vis_value, ik_vis_attr,
-                                         ik_vis_value, ik_switch_attr,
-                                         ik_switch_value, ik_wrist,
-                                         ik_elbow, time_range[-1],
-                                         time_range[-1] - 1)                    
-                    time_range = time_range[:-1]
-                    matrixData = matrixData[:-1]
+                        # self.set_ikfk_switch(flag, shoulder_jnt, elbow_jnt,
+                        #                      wrist_jnt, fk_shoulder, fk_elbow,
+                        #                      fk_wrist, fk_switch_attr,
+                        #                      fk_switch_value, fk_vis_attr,
+                        #                      fk_vis_value, ik_vis_attr,
+                        #                      ik_vis_value, ik_switch_attr,
+                        #                      ik_switch_value, ik_wrist,
+                        #                      ik_elbow, time_range[0],
+                        #                      time_range[0] - 1)
 
-                for i, key in enumerate(time_range):
-                    if flag: # ikfk
-                        should_rot, elbow_rot, wrist_rot = matrixData[i]
-                        self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
-                                            fk_wrist, should_rot,
-                                            elbow_rot, wrist_rot,
-                                            fk_switch_attr,
-                                            fk_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, key)                        
+                        if flag: # ikfk
+                            should_rot, elbow_rot, wrist_rot = matrixData[0]
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, time_range[0],
+                                                time_range[0] - 1)                        
 
-                    else: # fkik
-                        wrist_pos, wrist_rot, elbow_pos = matrixData[i]
-                        self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
-                                            wrist_rot, elbow_pos,
-                                            ik_switch_attr,
-                                            ik_switch_value, fk_vis_attr,
-                                            fk_vis_value, ik_vis_attr,
-                                            ik_vis_value, key)
+                        else: # fkik
+                            wrist_pos, wrist_rot, elbow_pos = matrixData[0]
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, time_range[0],
+                                                time_range[0] - 1)
 
-            # return to current frame
-            cmds.currentTime(current_frame, edit=True)
+                        time_range = time_range[1:]
+                        matrixData = matrixData[1:]
 
-        # except Exception, e:
-        #     double_warning(
-        #         "There is an Error in try block!\n{}".format(str(e))
-        #     )
+                    if keyframes[-1] > time_range[-1]:
+                        # reverse for the end frame
+                        # does NOT work, same issue as above, values broken
+                        # after gathering matrix data :(
+                        # self.set_ikfk_switch(not flag, shoulder_jnt, elbow_jnt,
+                        #                      wrist_jnt, fk_shoulder, fk_elbow,
+                        #                      fk_wrist, fk_switch_attr,
+                        #                      fk_switch_value, fk_vis_attr,
+                        #                      fk_vis_value, ik_vis_attr,
+                        #                      ik_vis_value, ik_switch_attr,
+                        #                      ik_switch_value, ik_wrist,
+                        #                      ik_elbow, time_range[-1],
+                        #                      time_range[-1] - 1)
 
-        # finally: # clean up
-        #     unlock_viewport()
-        #     cmds.undoInfo(closeChunk=True)
+                        # since it is bake every frame, no need to do the frame before
+                        if flag: # ikfk
+                            wrist_pos, wrist_rot, elbow_pos = end_data
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, time_range[-1])                       
+
+                        else: # fkik
+                            should_rot, elbow_rot, wrist_rot = end_data
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, time_range[-1]) 
+
+                        time_range = time_range[:-1]
+                        matrixData = matrixData[:-1]
+
+                    for i, key in enumerate(time_range):
+                        if flag: # ikfk
+                            should_rot, elbow_rot, wrist_rot = matrixData[i]
+                            self.set_ik_to_fk_switch(fk_shoulder, fk_elbow,
+                                                fk_wrist, should_rot,
+                                                elbow_rot, wrist_rot,
+                                                fk_switch_attr,
+                                                fk_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, key)                        
+
+                        else: # fkik
+                            wrist_pos, wrist_rot, elbow_pos = matrixData[i]
+                            self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos,
+                                                wrist_rot, elbow_pos,
+                                                ik_switch_attr,
+                                                ik_switch_value, fk_vis_attr,
+                                                fk_vis_value, ik_vis_attr,
+                                                ik_vis_value, key)
+
+                # return to current frame
+                cmds.currentTime(current_frame, edit=True)
+
+        except Exception, e:
+            double_warning(
+                "There is an Error in try block!\n{}".format(str(e))
+            )
+
+        finally: # clean up
+            unlock_viewport()
+            cmds.undoInfo(closeChunk=True)
 
     def get_ik_to_fk_switch(self, shoulder_jnt, elbow_jnt, wrist_jnt):
         """Executes the main ik --> fk switch operation using internal data.
@@ -2085,7 +2144,6 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # cmds.setKeyframe(fk_vis_attr)
         # cmds.setAttr(ik_vis_attr, int(ik_vis_value)) # does not work for some set up like Caroline
         # cmds.setKeyframe(ik_vis_attr)
-
         for fk, value in [[fk_shoulder, should_rot], [fk_elbow, elbow_rot],
                           [fk_wrist, wrist_rot]]:
             # apply in world space
@@ -2110,37 +2168,43 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         orig_wrist_pos, orig_wrist_rot = get_world_matrix(wrist_jnt)
         orig_switch_value = cmds.getAttr(ik_switch_attr)
 
-        # new way of getting wrist matrix (use constraint over xform)
-        # for some weird reason the wrist flip (for rig Max)
-        # but executing twice get it closer somehow (flip it back?)
-        # this may not happen to all the rig (worked just fine on Caroline)
-        # the wrist_pos should remain unchanged (verify??)
+        # this should have been easy using xform, but it is NOT
+        # new way of getting wrist matrix (use constraint over xform, which does NOT work)
         wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
-                                                  'parentConstraint')
-        cmds.setAttr(ik_switch_attr, ik_switch_value)  
-        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
+                                                  'parentConstraint') # up until this point, works for Caroline
         
+        # we should be done with the wrist by now, but NOPE
+        # for some weird reason the wrist will flip when this matrix is applied
+        # try it!
+        cmds.setAttr(ik_switch_attr, ik_switch_value) # set to ik space 
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
+
+        # but executing the constrain_move_key twice fixed it! (flip it back?)
+        # (ACTUALLY not twice, but undefined number of times depending on the rigs) 
+        # this happened mostly for advanced skeleton rigs (worked just fine on Caroline)
+        # unpredictable results for not only different rigs, but also the same rig (arm and leg)
+
+        # Let us do it x3 for now (worked for Yoyo, but not Nan's legs)
         #----------------------------------------------------------------------------
         # get joint position and rotation in world space, again
         wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
                                                   'parentConstraint')
-        cmds.setAttr(ik_switch_attr, ik_switch_value)  
-        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space
-        #----------------------------------------------------------------------------
-        # repeat (in cycle)             NEED to test with other rigs!!!!
-        # x 4   didn't work for both
-        # x 3   didn't work for leg
-        # x 2   didn't work for arm
-        # x 1   didn't work for leg
-        # x 0   didn't work for both
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space again
 
+
+        # get joint position and rotation in world space, again
+        wrist_pos, wrist_rot = constrain_move_key(wrist_jnt, ik_wrist,
+                                                  'parentConstraint')
+        apply_world_matrix(ik_wrist, wrist_pos, wrist_rot) # apply in world space again
+        #----------------------------------------------------------------------------
         # TODO: find out why. Could it be rotate order?
+        # TODO: most likely due to unclean joints (with nasty rotation values)
 
         # restore original matrix
         apply_world_matrix(ik_wrist, orig_wrist_pos, orig_wrist_rot)
-        cmds.setAttr(ik_switch_attr, orig_switch_value)
+        cmds.setAttr(ik_switch_attr, orig_switch_value) # set back to fk space
 
-        # vector math
+        # vector math for elbow position
         shoulder_jnt_vector = om.MVector(orig_shoulder_pos)
         elbow_jnt_vector = om.MVector(orig_elbow_pos)
         wrist_jnt_vector = om.MVector(orig_wrist_pos)
@@ -2148,8 +2212,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                            + shoulder_jnt_vector)
         aim_vector = ((elbow_jnt_vector - midpoint_vector) * 4
                       + midpoint_vector)
-        new_elbow_pos = (aim_vector.x, aim_vector.y, aim_vector.z)
+        new_elbow_pos = [aim_vector.x, aim_vector.y, aim_vector.z]
 
+        # return the values from wrist and elbow
         return wrist_pos, wrist_rot, new_elbow_pos
 
     def set_fk_to_ik_switch(self, ik_wrist, ik_elbow, wrist_pos, wrist_rot,
@@ -2239,6 +2304,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
             should_rot, elbow_rot, wrist_rot = self.get_ik_to_fk_switch(
                 shoulder_jnt, elbow_jnt, wrist_jnt
             )
+            # print should_rot, elbow_rot, wrist_rot
             self.set_ik_to_fk_switch(fk_shoulder, fk_elbow, fk_wrist,
                                      should_rot, elbow_rot, wrist_rot,
                                      fk_switch_attr, fk_switch_value,
@@ -2249,6 +2315,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
                 shoulder_jnt, elbow_jnt, wrist_jnt, ik_wrist, ik_switch_attr,
                 ik_switch_value
             )
+            # print wrist_pos, wrist_rot, elbow_pos
             self.set_fk_to_ik_switch(ik_wrist, ik_elbow, wrist_pos, wrist_rot,
                                      elbow_pos, ik_switch_attr,
                                      ik_switch_value, fk_vis_attr,
