@@ -4,11 +4,19 @@ MODULE: space_switch_tool
 CLASSES:
     SpaceSwitchTool: class for main UI and space switch methods.
     CustomIntValidator: class to reimplement the QIntValidator.
+    ClickableLabel: class to reimplement the QLabel.
 """
+
+__author__ = "Te Ling (Danny) Hsu"
+__copyright__ = "Copyright (c) 2020 Te Ling (Danny) Hsu"
+__license__ = "MIT License"
+__version__ = "1.0.0"
+
 import os
 import json
 import ntpath
 import logging
+import webbrowser
 from functools import partial
 
 import maya.mel as mel
@@ -409,6 +417,16 @@ def open_UI():
     space_switch_win.show()
     
 
+class ClickableLabel(QtWidgets.QLabel):
+    """Reimplements the QLabel so it emits clicked signal.
+    """
+    clicked = QtCore.Signal()
+    # def __init__(self):
+    #     super(ClickableLabel, self).__init__()
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
 class CustomIntValidator(QtGui.QIntValidator):
     """Reimplements the validate method of QIntValidator to
     accommodate an empty string user input.
@@ -440,14 +458,14 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """
         # set main QDialog parameters
         super(SpaceSwitchTool, self).__init__(parent)
-        # self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
         self.setWindowTitle(win_name)
         self.setFixedSize(350, 644)
         # self.setFixedWidth(350)
         # self.setMinimumHeight(644)
 
         # set label messages
-        self._title_txt = "\nPlease follow the instructions below:\n"
+        # self._title_txt = "\nPlease follow the instructions below:\n"
         self._tutorial_txt = "\nPlease follow the\ninstructions below:\n"
         self._default_empty_lbl = "--- empty ---"
         if not SpaceSwitchTool.folder_path_str:
@@ -485,8 +503,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._ik_fk_switch_tab = QtWidgets.QWidget()
 
         # build instruction widgets
-        self._warning_icon_lbl = QtWidgets.QLabel()
-        self._instruction_lbl = QtWidgets.QLabel(self._title_txt)
+        self._corporate_icon_lbl = ClickableLabel() # custom label
         self._load_data_btn = QtWidgets.QPushButton()
         self._save_data_btn = QtWidgets.QPushButton()
 
@@ -557,6 +574,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         # build execution widget, default for main switch tab
         self._swtich_btn = QtWidgets.QPushButton("Please Select an Item")
 
+        # build copyright label widget
+        txt = "{}    {}".format(__license__, __copyright__)
+        self._copyright_lbl = QtWidgets.QLabel(txt)
+
         # set up UI
         self._set_widgets()
         self._set_layouts()
@@ -571,12 +592,16 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         self._tabs.addTab(self._ik_fk_switch_tab, "set ik/fk input") # index 1
         self._tabs.addTab(self._space_switch_tab, "set space input") # index 2
 
-        # set instruction
-        warning_icon = QtWidgets.QApplication.style().standardIcon(
-            QtWidgets.QStyle.SP_MessageBoxWarning
+        # set title page
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        corporate_icon = QtGui.QIcon(
+            os.path.join(dir_path, "corporate_logo_white.png")
         )
-        warning_pixmap = QtGui.QPixmap(warning_icon.pixmap(32,32))
-        self._warning_icon_lbl.setPixmap(warning_pixmap)
+        corporate_pixmap = QtGui.QPixmap(corporate_icon.pixmap(180,50))
+        self._corporate_icon_lbl.setPixmap(corporate_pixmap)
+        txt = ("Special thanks to TaoShen Animation for inspiring this tool!\n"
+               "Please click here to visit their website!")
+        self._corporate_icon_lbl.setToolTip(txt)
 
         load_data_icon = QtWidgets.QApplication.style().standardIcon(
             QtWidgets.QStyle.SP_DialogOpenButton
@@ -656,6 +681,10 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         # set main switch button state
         self._swtich_btn.setEnabled(False)
+        self._swtich_btn.setFixedHeight(40)
+
+        # set copyright label alignment
+        self._copyright_lbl.setAlignment(QtCore.Qt.AlignRight)
 
     def _set_layouts(self):
         """Sets all layout components.
@@ -702,6 +731,7 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         master_lyt.addLayout(bake_mode_lyt)
         master_lyt.addLayout(time_range_option_lyt)
         master_lyt.addWidget(self._swtich_btn)
+        master_lyt.addWidget(self._copyright_lbl)
 
         # organize tab layouts
         main_switch_lyt.addLayout(main_switch_folder_lyt)
@@ -730,8 +760,8 @@ class SpaceSwitchTool(QtWidgets.QDialog):
 
         # organize instruction layouts
         title_lyt.addStretch()
-        title_lyt.addWidget(self._warning_icon_lbl)
-        title_lyt.addWidget(self._instruction_lbl)
+        title_lyt.addWidget(self._corporate_icon_lbl)
+        # title_lyt.addWidget(self._instruction_lbl)
         title_lyt.addStretch()
         title_lyt.addWidget(self._load_data_btn)
         title_lyt.addWidget(self._save_data_btn)
@@ -800,6 +830,9 @@ class SpaceSwitchTool(QtWidgets.QDialog):
         """Connects each widget to their method.
         """
         # load title buttons
+        self._corporate_icon_lbl.clicked.connect(partial(webbrowser.open_new_tab, "www.cgtaoshen.com"))
+        #     webbrowser.open_new_tab, self, "www.cgtaoshen.com"
+        # ))
         self._load_data_btn.clicked.connect(self._load_switch_data)
         self._save_data_btn.clicked.connect(self._save_switch_data)
 
